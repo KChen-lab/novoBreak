@@ -37,6 +37,7 @@ FileReader* fopen_m_filereader(int n_file, char **filenames){
 			cmd = (char*)malloc(strlen(filenames[i]) + 20);
 			sprintf(cmd, "gzip -dc %s", filenames[i]);
 			fc->filename = (char*)malloc(sizeof(char)* (strlen(filenames[i])+1));
+			strcpy(fc->filename, filenames[i]);
 			fc->file = popen(cmd, "r");
 			free(cmd);
 		} else if((fc->file = fopen(filenames[i], "r")) != NULL){
@@ -50,7 +51,7 @@ FileReader* fopen_m_filereader(int n_file, char **filenames){
 	fr->ptr   = 0;
 	fr->last_brk = 0;
 	fr->size  = 0;
-	fr->capacity = 16 * 1024;
+	fr->capacity = 512;
 	fr->buffer = (char*)malloc(fr->capacity + 2);
 	fr->line_breaker = '\n';
 	fr->delimiter    = '\t';
@@ -346,6 +347,7 @@ int fread_fastq_adv(Sequence **seq_ptr, FileReader *fr, int fastq_flag){
 }
 
 int guess_seq_file_type(FileReader *fr){
+	if (fr == NULL) return 0;
 	while(fread_line(fr->line, fr) != -1){
 		if(fr->line->size == 0) continue;
 		if(fr->line->string[0] == '#') continue;

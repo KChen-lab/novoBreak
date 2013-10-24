@@ -78,15 +78,12 @@ FileReader* string_filereader(char *string);
 
 void fclose_filereader(FileReader *fr);
 
-size_t fseek_filereader(FileReader *fr, size_t pos);
-
 int reset_filereader(FileReader *fr);
 
 int fread_line(String *line, FileReader *fr);
 int froll_back(FileReader *fr);
 
 int fread_table(FileReader *fr);
-#define count_cols(fr) (vec_size((fr)->tabs))
 #define get_col_vstr(fr, col) ((VirtualString*)get_vec_ref((fr)->tabs, col))
 #define get_col_str(fr, col) ((VirtualString*)get_vec_ref((fr)->tabs, col))->string
 #define get_col_len(fr, col) ((VirtualString*)get_vec_ref((fr)->tabs, col))->size
@@ -99,6 +96,7 @@ typedef struct {
 } SeqFileAttr;
 
 void guess_seq_file(FileReader *fr, SeqFileAttr *attr);
+int guess_seq_file_type(FileReader *fr);
 
 #define FASTA_FLAG_NORMAL		0
 #define FASTA_FLAG_NO_NAME		1
