@@ -38,6 +38,11 @@ typedef struct {
 	uint64_t kmer, cnt:12;
 } kmer_t;
 
+typedef struct {
+	uint64_t kmer, cnt:12;
+	
+} novo_kmer_t;
+
 #define kmer_hashcode(k) u64hashcode((k).kmer)
 #define kmer_equals(k1, k2) ((k1).kmer == (k2).kmer)
 define_hashset(kmerhash, kmer_t, kmer_hashcode, kmer_equals);
@@ -46,7 +51,7 @@ define_hashset(kmerhash, kmer_t, kmer_hashcode, kmer_equals);
 extern "C" {
 #endif
 
-kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq);
+kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash);
 uint64_t filter_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq);
 uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize);
 

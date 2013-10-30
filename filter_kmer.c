@@ -21,14 +21,12 @@
 #include "filter_kmer.h"
 
 
-kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq) {
-	kmerhash *hash;
+kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash) {
 	kmer_t KMER, *kmer;
 	uint64_t k, r, kmask;
 	uint32_t i, len, rid;
 	int exists;
 	Sequence *seq;
-	hash = init_kmerhash(1023);
 	rid = 0;
 	KMER.cnt = 0;
 	KMER.kmer = 0;
@@ -153,11 +151,13 @@ int usage() {
 		   "Auther: Zechen Chong <chongzechen@gmail.com> & Wanding Zhou <zhouwanding@gmail.com>\n"
 		   "Version: 1.01 (r20131023)\n"
 		   "Usage:\n"
-		   "  clinsek -i <tumor.fq(.gz)> -c <normal.fq(.gz)> -r <reference> -o <output.kmer> [options]\n"
+		   "  clinsek -1 <tumor_1.fq(.gz)> -2 <tumor_2.fq(.gz)> -3 <normal_1.fq(.gz)> -4 <normal_2.fq(.gz)> -r <reference> -o <output.kmer> [options]\n"
 		   "Options:\n"
 		   "  -h             This help\n"
-		   "  -i <string>    Treatment file in fastq format. Multiple treatment files could be input as -i t1.fq -i t2.fq ...\n"
-		   "  -c <string>    Control file in fastq format. Multiple treatment files could be input as -c t1.fq -c t2.fq ...\n"
+		   "  -1 <string>    Treatment pair1 file in fastq format. Multiple treatment files could be input as -1 s1_1.fq -1 s2_1.fq ...\n"
+		   "  -2 <string>    Treatment pair2 file in fastq format. Multiple treatment files could be input as -2 s1_2.fq -2 s2_1.fq ...\n"
+		   "  -3 <string>    Control pair1 file in fastq format. Multiple treatment files could be input as -3 c1_1.fq -3 c2_1.fq ...\n"
+		   "  -4 <string>    Control pair2 file in fastq format. Multiple treatment files could be input as -4 c1_2.fq -4 c2_2.fq ...\n"
 		   "  -r <string>    Reference file in fasta format\n"
            "  -k <int>       Kmer size, <=31 [27]\n"
 		   "  -o <string>    Output kmer\n"
@@ -170,22 +170,26 @@ int usage() {
 int main(int argc, char **argv) {
 	kmerhash *khash;
 	kmer_t KMER;
-	FileReader *inf, *ctrlf, *reff;
+	FileReader *inf1, *inf2, *ctrlf1, *ctrlf2, *reff;
 	FILE *out;
-	char *infile, *outfile, *ctrlfile, *reffile;
-	flist *inlist, *ctrllist;
-	inlist = init_flist(2);
-	ctrllist = init_flist(2);
+	char *in1file, *in2file, *outfile, *ctrl1file, *ctrl2file, *reffile;
+	flist *in1list, *in2list, *ctrl1list, *ctrl2list;
+	in1list = init_flist(2);
+	in2list = init_flist(2);
+	ctrl1list = init_flist(2);
+	ctrl2list = init_flist(2);
 	int c, is_fq;
 	uint32_t ksize = 27, mincnt = 4, i;
 	uint64_t ret;
-	infile = outfile = ctrlfile = reffile = NULL;
+	in1file = in2file = outfile = ctrl1file = ctrl2file = reffile = NULL;
 	
-	while ((c = getopt(argc, argv, "hi:c:k:o:m:r:")) != -1) {
+	while ((c = getopt(argc, argv, "h1:2:3:4:k:o:m:r:")) != -1) {
 		switch (c) {
 			case 'h': return usage();
-			case 'i': push_flist(inlist, optarg); break;
-			case 'c': push_flist(ctrllist, optarg); break;
+			case '1': push_flist(in1list, optarg); break;
+			case '2': push_flist(in2list, optarg); break;
+			case '3': push_flist(ctrl1list, optarg); break;
+			case '4': push_flist(ctrl2list, optarg); break;
 			case 'k': ksize = atoi(optarg); break;
 			case 'o': outfile = optarg; break;
 			case 'm': mincnt = atoi(optarg); break;
@@ -193,19 +197,20 @@ int main(int argc, char **argv) {
 			default: return usage();
 		}
 	}
-	if (count_flist(inlist) == 0 || count_flist(ctrllist) == 0 || reffile == NULL) return usage();
+	if (count_flist(in1list) == 0 || count_flist(ctrl1list) == 0 || reffile == NULL) return usage();
+	if (count_flist(in2list) != 0 && count_flist(in1list) != count_flist(in2list)) return usage();
 	is_fq = 0;
 	if ((reff = fopen_filereader(reffile)) == NULL) {
-		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
+		fprintf(stderr, " -- Cannot open reference file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
 		fflush(stderr);
 		abort();
 	}
-	if ((inf = fopen_m_filereader(count_flist(inlist), as_array_flist(inlist))) == NULL) {
+	if ((inf1 = fopen_m_filereader(count_flist(in1list), as_array_flist(in1list))) == NULL) {
 		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
 		fflush(stderr);
 		abort();
 	} else {
-		is_fq = guess_seq_file_type(inf);
+		is_fq = guess_seq_file_type(inf1);
 		switch (is_fq) {
 			case 1: is_fq = 0; break;
 			case 2: is_fq = 1; break;
@@ -213,11 +218,36 @@ int main(int argc, char **argv) {
 			abort();
 		}
 	}
-	if ((ctrlf = fopen_m_filereader(count_flist(ctrllist), as_array_flist(ctrllist))) == NULL) {
+	if ((inf2 = fopen_m_filereader(count_flist(in2list), as_array_flist(in2list))) == NULL) {
+		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
+		fflush(stderr);
+		abort();
+	} else {
+		is_fq = guess_seq_file_type(inf2);
+		switch (is_fq) {
+			case 1: is_fq = 0; break;
+			case 2: is_fq = 1; break;
+			default: fprintf(stderr, "unknown file type\n");
+			abort();
+		}
+	}
+	if ((ctrlf1 = fopen_m_filereader(count_flist(ctrl1list), as_array_flist(ctrl1list))) == NULL) {
 		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
 		abort();
 	} else {
-		is_fq = guess_seq_file_type(ctrlf);
+		is_fq = guess_seq_file_type(ctrlf1);
+		switch (is_fq) {
+			case 1: is_fq = 0; break;
+			case 2: is_fq = 1; break;
+			default: fprintf(stderr, "unknown file type\n");
+			abort();
+		}
+	}
+	if ((ctrlf2 = fopen_m_filereader(count_flist(ctrl2list), as_array_flist(ctrl2list))) == NULL) {
+		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
+		abort();
+	} else {
+		is_fq = guess_seq_file_type(ctrlf2);
 		switch (is_fq) {
 			case 1: is_fq = 0; break;
 			case 2: is_fq = 1; break;
@@ -234,15 +264,19 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Building kmer...\n");
 	fflush(stdout);
-	khash = build_kmerhash(inf, ksize, is_fq);
+	khash = init_kmerhash(1023);
+	khash = build_kmerhash(inf1, ksize, is_fq, khash);
+	khash = build_kmerhash(inf2, ksize, is_fq, khash);
 	fprintf(stdout, " %llu kmers loaded\n\n", (unsigned long long)count_kmerhash(khash));
 	fflush(stdout);
 	
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Filtering kmers from control...\n");
 	fflush(stdout);
-	ret = filter_ctrl_kmers(khash, ctrlf, ksize, is_fq);
-	fprintf(stdout, "Filtered %llu kmer from control\n", (unsigned long long)ret);
+	ret = filter_ctrl_kmers(khash, ctrlf1, ksize, is_fq);
+	fprintf(stdout, "Filtered %llu kmer from control file 1\n", (unsigned long long)ret);
+	ret = filter_ctrl_kmers(khash, ctrlf2, ksize, is_fq);
+	fprintf(stdout, "Filtered %llu kmer from control file 2\n", (unsigned long long)ret);
 	fflush(stdout);
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "There are still %llu kmers left\n\n", (unsigned long long)count_kmerhash(khash));
@@ -273,10 +307,14 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "%llu kmers passed the minimum frequency cutoff (%u)\n", (unsigned long long)ret, mincnt);
 	fflush(stdout);
 	free_kmerhash(khash);
-	free_flist(inlist);
-	free_flist(ctrllist);
-	fclose_filereader(inf);
-	fclose_filereader(ctrlf);
+	free_flist(in1list);
+	free_flist(in2list);
+	free_flist(ctrl1list);
+	free_flist(ctrl2list);
+	fclose_filereader(inf1);
+	fclose_filereader(inf2);
+	fclose_filereader(ctrlf1);
+	fclose_filereader(ctrlf2);
 	fclose_filereader(reff);
 	fclose(out);
 	fprintf(stderr, "Program exit normally\n");
