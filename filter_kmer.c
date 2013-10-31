@@ -33,7 +33,7 @@ kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* ha
 //	kmask = (1LLU << (2 * ksize)) - 1;
 	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
 	seq = NULL;
-	while (is_fq?fread_fastq_adv(&seq, fr, 5):fread_fastq_adv(&seq, fr, 1)) {
+	while (is_fq?fread_fastq_adv(&seq, fr, FASTQ_FLAG_NO_NAME | FASTQ_FLAG_NO_QUAL):fread_fasta_adv(&seq, fr, FASTA_FLAG_NO_NAME)) {
 		rid ++;
 		if ((rid & 0xFFFFU) == 0) {
 			fprintf(stdout, "[%s] parsed %10u reads\r", __FUNCTION__, rid);
@@ -94,6 +94,131 @@ uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize) {
 		}
 	}
 	return ret;
+}
+
+pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, FileReader *f1, FileReader *f2) {
+	pairv *pairs = init_pairv(4);
+	pair_t *pair;
+	kmer_t KMER, *ret;
+	Sequence *read[2];
+	int is_fq[2];
+	uint32_t rid, len, i, j;
+	char *seq;
+	uint64_t k, kmask = (1LLU << (2 * ksize)) - 1, r;
+
+	read[0] = read[1] = NULL;
+	rid = 0;
+	KMER.cnt = 0;
+
+	is_fq[0] = (guess_seq_file_type(f1) == 2);
+	is_fq[1] = (guess_seq_file_type(f2) == 2);
+
+	while (1) {
+		label:
+		if (!(is_fq[0]?fread_fastq(&read[0], f1):fread_fasta(&read[0], f1)))  break;
+		if (!(is_fq[1]?fread_fastq(&read[1], f2):fread_fasta(&read[1], f2)))  break;
+		rid ++;
+		if ((rid & 0xFFFFU) == 0) {
+			fprintf(stdout, "[%s] parsed %10u pairs\r", __FUNCTION__, rid);
+		}
+		for (i = 0; i < 2; i ++) {
+			seq = read[i]->seq.string;
+			len = read[i]->seq.size;
+			k = 0;
+			for (j = 0; j < len; j++) {
+				k = ((k << 2) | base_bit_table[(int)seq[j]]) & kmask;
+				if (j + 1 < ksize) continue;
+				r = dna_rev_seq(k, ksize);
+				if (r < k) {
+					KMER.kmer = r;
+				} else {
+					KMER.kmer = k;
+				}
+				ret = get_kmerhash(hash, KMER);
+				if (ret == NULL || ret->cnt < mincnt)  {
+					continue;
+				} 
+				pair = next_ref_pairv(pairs);
+				pair->r1.name = strdup(read[0]->name.string);
+				pair->r1.header = strdup(read[0]->header.string);
+				pair->r1.seq = strdup(read[0]->seq.string);
+				pair->r1.qual = strdup(read[0]->qual.string);
+				pair->r2.name = strdup(read[1]->name.string);
+				pair->r2.header = strdup(read[1]->header.string);
+				pair->r2.seq = strdup(read[1]->seq.string);
+				pair->r2.qual = strdup(read[1]->qual.string);
+				goto label;
+			}
+		}
+	}
+	return pairs;
+}
+
+static inline void destroy_pair(pair *pair) {
+	free(pair->name);
+	free(pair->header);
+	free(pair->seq);
+	free(pair->qual);
+}
+void destroy_pairv(pairv *pairs) {
+	pair_t *pair;
+	uint32_t i;
+
+	for (i = 0; i < count_pairv(pairs); i++) {
+		pair = ref_pairv(pairs, i);
+		destroy_pair(&pair->r1);
+		destroy_pair(&pair->r2);
+	}
+	free_pairv(pairs);
+}
+
+static inline int cmp_pair_func(pair_t p1, pair_t p2, void *obj) {
+
+	if (strcmp(p1.r1.seq, p2.r1.seq) == 0 && strcmp(p1.r2.seq, p2.r2.seq) == 0)
+		return 0;
+
+
+	return strcmp(p1.r1.seq, p2.r1.seq);
+	obj = obj;
+}
+
+define_quick_sort(sort_pairs, pair_t, cmp_pair_func);
+
+void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2) {
+	pair_t *pair = NULL;
+	uint32_t i, dups = 0;
+	char pre1[256] = "", pre2[256] = "";
+
+	sort_pairs(ref_pairv(pairs, 0), count_pairv(pairs), NULL);
+	
+	for (i = 0; i < count_pairv(pairs); i++) {
+		pair = ref_pairv(pairs, i);
+		if (pre1 == NULL) {
+			memcpy(pre1, pair->r1.seq, strlen(pair->r1.seq)+1);
+			memcpy(pre2, pair->r2.seq, strlen(pair->r2.seq)+1);
+			fprintf(out1, "@%s\n%s\n+\n%s\n", pair->r1.header, pair->r1.seq, pair->r1.qual);
+			fprintf(out2, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
+			//printf("%s\t%s\n", pair->r1.seq, pair->r2.seq);
+		} else {
+			if (strcmp(pre1, pair->r1.seq) == 0 && strcmp(pre2, pair->r2.seq) == 0) {
+			//	put_u32hash(pairs->dups, i)
+				dups ++;
+				continue;
+			}
+			else {
+				//printf("%s\t%s\n", pre1, pre2);
+				fprintf(out1, "@%s\n%s\n+\n%s\n", pair->r1.header, pair->r1.seq, pair->r1.qual);
+				fprintf(out2, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
+				//printf("%s\t%s\n", pair->r1.seq, pair->r2.seq);
+				memcpy(pre1, pair->r1.seq, strlen(pair->r1.seq)+1);
+				memcpy(pre2, pair->r2.seq, strlen(pair->r2.seq)+1);
+			}
+		}
+		//printf("%s\t%s\n", pair->r1.seq.string, pair->r2.seq.string);
+	}
+//	printf("%s\t%s\n", pre1, pre2);
+	fprintf(stdout, "[%s] removed %u duplicated read pairs\n", __FUNCTION__, dups);
+	fflush(stdout);
 }
 
 uint64_t filter_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq) {
@@ -170,8 +295,9 @@ int usage() {
 int main(int argc, char **argv) {
 	kmerhash *khash;
 	kmer_t KMER;
+	pairv *pairs;
 	FileReader *inf1, *inf2, *ctrlf1, *ctrlf2, *reff;
-	FILE *out;
+	FILE *out, *out1, *out2;
 	char *in1file, *in2file, *outfile, *ctrl1file, *ctrl2file, *reffile;
 	flist *in1list, *in2list, *ctrl1list, *ctrl2list;
 	in1list = init_flist(2);
@@ -261,6 +387,17 @@ int main(int argc, char **argv) {
 		abort();
 	}
 
+	if ((out1 = fopen("novo_kmer_read1.fq", "w")) == NULL) {
+		fprintf(stderr, " cannot open file to write\n");
+		fflush(stderr);
+		abort();
+	}
+
+	if ((out2 = fopen("novo_kmer_read2.fq", "w")) == NULL) {
+		fprintf(stderr, " cannot open file to write\n");
+		fflush(stderr);
+		abort();
+	}
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Building kmer...\n");
 	fflush(stdout);
@@ -270,6 +407,8 @@ int main(int argc, char **argv) {
 	fprintf(stdout, " %llu kmers loaded\n\n", (unsigned long long)count_kmerhash(khash));
 	fflush(stdout);
 	
+	fclose_filereader(inf1);
+	fclose_filereader(inf2);
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Filtering kmers from control...\n");
 	fflush(stdout);
@@ -293,6 +432,10 @@ int main(int argc, char **argv) {
 	fflush(stdout);
 //	qsort(khash->array, (unsigned long long)count_kmerhash(khash), sizeof(kmer_t), cmp_kmer);
 	ret = 0;
+	inf1 = fopen_m_filereader(count_flist(in1list), as_array_flist(in1list));
+	inf2 = fopen_m_filereader(count_flist(in2list), as_array_flist(in2list));
+	pairs =  loadkmerseq(khash, ksize, mincnt, inf1, inf2);
+	dedup_pairs(pairs, out1, out2);
 	reset_iter_kmerhash(khash);
 	while (iter_kmerhash(khash, &KMER)) {
 		if (KMER.cnt < mincnt) continue;
@@ -306,6 +449,7 @@ int main(int argc, char **argv) {
 	
 	fprintf(stdout, "%llu kmers passed the minimum frequency cutoff (%u)\n", (unsigned long long)ret, mincnt);
 	fflush(stdout);
+	destroy_pairv(pairs);
 	free_kmerhash(khash);
 	free_flist(in1list);
 	free_flist(in2list);

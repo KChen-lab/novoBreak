@@ -21,28 +21,60 @@
 #include <stdlib.h>
 #include <string.h>
 
+FileReader* popen_m_filereader(int n_file, char **filenames){
+	FileReader *fr;
+	fr_file_t *fc;
+	int i;
+	fr = (FileReader*)malloc(sizeof(FileReader));
+	fr->files = init_fr_filev(n_file);
+	for(i=0;i<n_file;i++){
+		fc = next_ref_fr_filev(fr->files);
+		fc->filename = (char*)malloc(sizeof(char)* (strlen(filenames[i])+1));
+		strcpy(fc->filename, filenames[i]);
+		fc->file = popen(fc->filename, "r");
+		fc->is_proc = 1;
+	}
+	fr->fidx  = 0;
+	fr->ptr   = 0;
+	fr->last_brk = 0;
+	fr->size  = 0;
+	fr->capacity = 16 * 1024;
+	fr->buffer = (char*)malloc(fr->capacity + 2);
+	fr->line_breaker = '\n';
+	fr->delimiter    = '\t';
+	fr->line = init_string(81);
+	fr->vline = NULL;
+	fr->tabs = init_VStrv(12);
+	fr->seq_type = 0;
+	return fr;
+}
+
 FileReader* fopen_m_filereader(int n_file, char **filenames){
 	FileReader *fr;
 	fr_file_t *fc;
 	char *cmd;
 	int i;
 	fr = (FileReader*)malloc(sizeof(FileReader));
-	fr->files = init_vec(sizeof(fr_file_t), n_file);
+	fr->files = init_fr_filev(n_file);
 	for(i=0;i<n_file;i++){
-		fc = get_next_vec_ref(fr->files);
+		fc = next_ref_fr_filev(fr->files);
 		if(filenames[i] == NULL || strcmp(filenames[i], "-") == 0){
 			fc->file = stdin;
 			fc->filename = NULL;
+			fc->is_proc  = 0;
 		} else if(strlen(filenames[i]) > 3 && strcmp(filenames[i] + strlen(filenames[i]) - 3, ".gz") == 0){
 			cmd = (char*)malloc(strlen(filenames[i]) + 20);
 			sprintf(cmd, "gzip -dc %s", filenames[i]);
-			fc->filename = (char*)malloc(sizeof(char)* (strlen(filenames[i])+1));
-			strcpy(fc->filename, filenames[i]);
-			fc->file = popen(cmd, "r");
+			fc->filename = (char*)malloc(sizeof(char)* (strlen(cmd)+1));
+			strcpy(fc->filename, cmd);
+			fc->file = i? NULL : popen(cmd, "r");
+			fc->is_proc  = 1;
 			free(cmd);
 		} else if((fc->file = fopen(filenames[i], "r")) != NULL){
 			fc->filename = (char*)malloc(sizeof(char)* (strlen(filenames[i])+1));
 			strcpy(fc->filename, filenames[i]);
+			if(i){ fclose(fc->file); fc->file = NULL; }
+			fc->is_proc  = 0;
 		} else {
 			return NULL;
 		}
@@ -51,13 +83,14 @@ FileReader* fopen_m_filereader(int n_file, char **filenames){
 	fr->ptr   = 0;
 	fr->last_brk = 0;
 	fr->size  = 0;
-	fr->capacity = 512;
+	fr->capacity = 16 * 1024;
 	fr->buffer = (char*)malloc(fr->capacity + 2);
 	fr->line_breaker = '\n';
 	fr->delimiter    = '\t';
 	fr->line = init_string(81);
 	fr->vline = NULL;
-	fr->tabs = init_vec(sizeof(VirtualString), 12);
+	fr->tabs = init_VStrv(12);
+	fr->seq_type = 0;
 	return fr;
 }
 
@@ -65,6 +98,12 @@ FileReader* fopen_filereader(char *filename){
 	char *filenames[1];
 	filenames[0] = filename;
 	return fopen_m_filereader(1, filenames);
+}
+
+FileReader* popen_filereader(char *filename){
+	char *filenames[1];
+	filenames[0] = filename;
+	return popen_m_filereader(1, filenames);
 }
 
 FileReader* fopen_filereader2(char *prefix, char *postfix){
@@ -82,7 +121,7 @@ FileReader* stdin_filereader(){
 
 FileReader* string_filereader(char *string){
 	FileReader *fr = (FileReader*)malloc(sizeof(FileReader));
-	fr->files = init_vec(sizeof(fr_file_t), 1);
+	fr->files = init_fr_filev(2);
 	fr->fidx = 0;
 	fr->ptr   = 0;
 	fr->last_brk = 0;
@@ -93,27 +132,28 @@ FileReader* string_filereader(char *string){
 	fr->delimiter    = '\t';
 	fr->line = init_string(81);
 	fr->vline = NULL;
-	fr->tabs = init_vec(sizeof(VirtualString), 12);
+	fr->tabs = init_VStrv(12);
+	fr->seq_type = 0;
 	return fr;
 }
 
 void fclose_filereader(FileReader *fr){
 	fr_file_t *fc;
 	size_t i;
-	for(i=0;i<vec_size(fr->files);i++){
-		fc = get_vec_ref(fr->files, i);
+	for(i=0;i<fr->files->size;i++){
+		fc = ref_fr_filev(fr->files, i);
 		if(fc->file && fc->file != stdin){
-			if(fc->filename && strlen(fc->filename) > 3 && strcmp(fc->filename + strlen(fc->filename) - 3, ".gz") == 0) pclose(fc->file);
+			if(fc->is_proc) pclose(fc->file);
 			else if(fc->file != stdin) fclose(fc->file);
 		}
 		if(fc->filename) free(fc->filename);
 	}
-	free_vec(fr->files);
+	free_fr_filev(fr->files);
 	if(fr->buffer != NULL) free(fr->buffer);
 	fr->buffer = NULL;
 	if(fr->line){ free_string(fr->line); }
 	if(fr->vline){ free_string(fr->vline); }
-	free_vec(fr->tabs);
+	free_VStrv(fr->tabs);
 	free(fr);
 }
 
@@ -141,7 +181,7 @@ int fread_line2(String *line, FileReader *fr){
 				if(fr->buffer[last_ptr++] == fr->line_breaker){ ret = 1; break; }
 			}
 			if(ret == 1) break;
-		} else if(fr->fidx < vec_size(fr->files)) {
+		} else if(fr->fidx < fr->files->size) {
 			if(fr->ptr){
 				memmove(fr->buffer, fr->buffer + fr->ptr, fr->size - fr->ptr);
 				last_ptr -= fr->ptr;
@@ -152,9 +192,18 @@ int fread_line2(String *line, FileReader *fr){
 				fr->capacity += 4 * 1024;
 				fr->buffer = (char*)realloc(fr->buffer, fr->capacity + 2);
 			}
-			n = fr_fread(fr->buffer + fr->size, sizeof(char), fr->capacity - fr->size, ((fr_file_t*)get_vec_ref(fr->files, fr->fidx))->file);
+			n = fr_fread(fr->buffer + fr->size, sizeof(char), fr->capacity - fr->size, ((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file);
 			if(n == 0){
+				fclose(((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file);
+				((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file = NULL;
 				fr->fidx ++;
+				if(fr->fidx < fr->files->size){
+					if(((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->is_proc){
+						((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file = popen(((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->filename, "r");
+					} else {
+						((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file = fopen(((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->filename, "r");
+					}
+				}
 			} else {
 				fr->size += n;
 			}
@@ -224,8 +273,7 @@ int* init_delimiters(char *expr){
 }
 
 int fread_table(FileReader *fr){
-	VirtualString *vstr;
-	int i, ret;
+	int ret;
 	if(fread_line(fr->line, fr) < 0) return -1;
 	if(fr->vline == NULL){
 		fr->vline = init_string(fr->line->size);
@@ -234,12 +282,8 @@ int fread_table(FileReader *fr){
 		clear_string(fr->vline);
 		append_string(fr->vline, fr->line->string, fr->line->size);
 	}
-	clear_vec(fr->tabs);
+	clear_VStrv(fr->tabs);
 	ret = split_string(fr->vline, fr->delimiter, fr->tabs);
-	for(i=1;i<ret;i++){
-		vstr = get_vec_ref(fr->tabs, i);
-		vstr->string[-1] = 0;
-	}
 	return ret;
 }
 
@@ -248,9 +292,9 @@ int fread_fasta_adv(Sequence **seq_ptr, FileReader *fr, int fasta_flag){
 	int i, n, flag;
 	if(*seq_ptr == NULL){
 		seq = (Sequence*)malloc(sizeof(Sequence));
-		seq->name.string = seq->comment.string = seq->seq.string = seq->qual.string = NULL;
-		seq->name.size = seq->comment.size = seq->seq.size = seq->qual.size = 0;
-		seq->name.capacity = seq->comment.capacity = seq->seq.capacity = seq->qual.capacity = 0;
+		seq->name.string = seq->header.string = seq->seq.string = seq->qual.string = NULL;
+		seq->name.size = seq->header.size = seq->seq.size = seq->qual.size = 0;
+		seq->name.capacity = seq->header.capacity = seq->seq.capacity = seq->qual.capacity = 0;
 	} else {
 		seq = *seq_ptr;
 	}
@@ -263,7 +307,7 @@ int fread_fasta_adv(Sequence **seq_ptr, FileReader *fr, int fasta_flag){
 			}
 			flag = 1;
 			seq->name.size = 0;
-			seq->comment.size = 0;
+			seq->header.size = 0;
 			seq->seq.size = 0;
 			if((fasta_flag & FASTA_FLAG_NO_NAME) == 0){
 				for(i=1;i<n;i++){
@@ -277,7 +321,7 @@ int fread_fasta_adv(Sequence **seq_ptr, FileReader *fr, int fasta_flag){
 				}
 				BREAK_OUT:
 				append_string(&(seq->name), fr->line->string + 1, i - 1);
-				if(i + 1 < n) append_string(&(seq->comment), fr->line->string + i + 1, n - i - 1);
+				append_string(&(seq->header), fr->line->string + 1, n - 1);
 			}
 		} else if(flag){
 			if((fasta_flag & FASTA_FLAG_NO_SEQ) == 0){
@@ -302,12 +346,12 @@ int fread_fastq_adv(Sequence **seq_ptr, FileReader *fr, int fastq_flag){
 	int i, n, flag;
 	if(*seq_ptr == NULL){
 		seq = (Sequence*)malloc(sizeof(Sequence));
-		seq->name.string = seq->comment.string = seq->seq.string = seq->qual.string = NULL;
-		seq->name.capacity = seq->comment.capacity = seq->seq.capacity = seq->qual.capacity = 0;
+		seq->name.string = seq->header.string = seq->seq.string = seq->qual.string = NULL;
+		seq->name.capacity = seq->header.capacity = seq->seq.capacity = seq->qual.capacity = 0;
 	} else {
 		seq = *seq_ptr;
 	}
-	seq->name.size = seq->comment.size = seq->seq.size = seq->qual.size = 0;
+	seq->name.size = seq->header.size = seq->seq.size = seq->qual.size = 0;
 	flag = 0;
 	while(flag != 4 && (n = fread_line(fr->line, fr)) >= 0){
 		switch(flag){
@@ -317,7 +361,7 @@ int fread_fastq_adv(Sequence **seq_ptr, FileReader *fr, int fastq_flag){
 				if(fastq_flag & FASTQ_FLAG_NO_NAME) break;
 				for(i=1;i<n;i++) if(fr->line->string[i] == ' ' || fr->line->string[i] == '\t' || fr->line->string[i] == '\n') break;
 				append_string(&seq->name, fr->line->string + 1, i - 1);
-				if(i < n) append_string(&seq->comment, fr->line->string + i + 1, n - i - 1);
+				append_string(&seq->header, fr->line->string + 1, n - 1);
 				break;
 			case 1:
 				flag = 2;
@@ -347,7 +391,6 @@ int fread_fastq_adv(Sequence **seq_ptr, FileReader *fr, int fastq_flag){
 }
 
 int guess_seq_file_type(FileReader *fr){
-	if (fr == NULL) return 0;
 	while(fread_line(fr->line, fr) != -1){
 		if(fr->line->size == 0) continue;
 		if(fr->line->string[0] == '#') continue;
@@ -363,6 +406,15 @@ int guess_seq_file_type(FileReader *fr){
 		}
 	}
 	return 0;
+}
+
+int fread_seq_adv(Sequence **seq, FileReader *fr, int flag){
+	if(fr->seq_type == 0) fr->seq_type = guess_seq_file_type(fr);
+	switch(fr->seq_type){
+		case 1: return fread_fasta_adv(seq, fr, flag);
+		case 2: return fread_fastq_adv(seq, fr, flag);
+		default: return 0;
+	}
 }
 
 void guess_seq_file(FileReader *fr, SeqFileAttr *attr){
@@ -406,12 +458,12 @@ char *fread_all(FileReader *fr){
 int reset_filereader(FileReader *fr){
 	uint32_t i;
 	fr_file_t *fc;
-	for(i=0;i<vec_size(fr->files);i++){
-		fc = get_vec_ref(fr->files, i);
+	for(i=0;i<fr->files->size;i++){
+		fc = ref_fr_filev(fr->files, i);
 		fseek(fc->file, 0, SEEK_SET);
 	}
 	fr->fidx = 0;
-	if(vec_size(fr->files)) fr->size = 0;
+	if(fr->files->size) fr->size = 0;
 	fr->ptr  = 0;
 	return 1;
 }

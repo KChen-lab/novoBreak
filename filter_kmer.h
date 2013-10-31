@@ -39,9 +39,19 @@ typedef struct {
 } kmer_t;
 
 typedef struct {
-	uint64_t kmer, cnt:12;
-	
-} novo_kmer_t;
+	char *name;
+	char *header;
+	char *seq;
+	char *qual;
+} pair;
+
+typedef struct {
+	pair r1;
+	pair r2;
+} pair_t;
+
+define_list(pairv, pair_t);
+
 
 #define kmer_hashcode(k) u64hashcode((k).kmer)
 #define kmer_equals(k1, k2) ((k1).kmer == (k2).kmer)
@@ -54,6 +64,9 @@ extern "C" {
 kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash);
 uint64_t filter_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq);
 uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize);
+pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, FileReader *f1, FileReader *f2);
+void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2);
+void destroy_pairv(pairv *pairs);
 
 #ifdef __CPLUSPLUS
 }
