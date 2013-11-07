@@ -29,6 +29,7 @@ kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* ha
 	Sequence *seq;
 	rid = 0;
 	KMER.cnt = 0;
+	KMER.cnt2 = 0;
 	KMER.kmer = 0;
 //	kmask = (1LLU << (2 * ksize)) - 1;
 	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
@@ -60,6 +61,7 @@ kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* ha
 			} else {
 				kmer->kmer = KMER.kmer;
 				kmer->cnt = 1;
+				kmer->cnt2 = 0;
 			}
 		}
 	}
@@ -96,7 +98,7 @@ uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize) {
 	return ret;
 }
 
-pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, FileReader *f1, FileReader *f2) {
+pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, FileReader *f1, FileReader *f2) {
 	pairv *pairs = init_pairv(4);
 	pair_t *pair;
 	kmer_t KMER, *ret;
@@ -138,19 +140,35 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, FileReader *
 				if (ret == NULL || ret->cnt < mincnt)  {
 					continue;
 				} 
-				pair = next_ref_pairv(pairs);
-				pair->r1.name = strdup(read[0]->name.string);
-				pair->r1.header = strdup(read[0]->header.string);
-				pair->r1.seq = strdup(read[0]->seq.string);
-				pair->r1.qual = strdup(read[0]->qual.string);
-				pair->r2.name = strdup(read[1]->name.string);
-				pair->r2.header = strdup(read[1]->header.string);
-				pair->r2.seq = strdup(read[1]->seq.string);
-				pair->r2.qual = strdup(read[1]->qual.string);
+				if (ret->cnt2 < maxcnt2 && (float)ret->cnt2/(ret->cnt+ret->cnt2) < 0.01) { //TODO magic number
+					pair = next_ref_pairv(pairs);
+					pair->mt = SOMATIC;
+					pair->r1.name = strdup(read[0]->name.string);
+					pair->r1.header = strdup(read[0]->header.string);
+					pair->r1.seq = strdup(read[0]->seq.string);
+					pair->r1.qual = strdup(read[0]->qual.string);
+					pair->r2.name = strdup(read[1]->name.string);
+					pair->r2.header = strdup(read[1]->header.string);
+					pair->r2.seq = strdup(read[1]->seq.string);
+					pair->r2.qual = strdup(read[1]->qual.string);
+				}
+				else if (ret->cnt2 > maxcnt2 * 2) { //TODO magic number
+					pair = next_ref_pairv(pairs);
+					pair->mt = GERMLINE;
+					pair->r1.name = strdup(read[0]->name.string);
+					pair->r1.header = strdup(read[0]->header.string);
+					pair->r1.seq = strdup(read[0]->seq.string);
+					pair->r1.qual = strdup(read[0]->qual.string);
+					pair->r2.name = strdup(read[1]->name.string);
+					pair->r2.header = strdup(read[1]->header.string);
+					pair->r2.seq = strdup(read[1]->seq.string);
+					pair->r2.qual = strdup(read[1]->qual.string);
+				}
 				goto label;
 			}
 		}
 	}
+	if (read[1]) free_sequence(read[1]);
 	return pairs;
 }
 
@@ -184,7 +202,7 @@ static inline int cmp_pair_func(pair_t p1, pair_t p2, void *obj) {
 
 define_quick_sort(sort_pairs, pair_t, cmp_pair_func);
 
-void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2) {
+void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2, FILE *out3, FILE *out4) {
 	pair_t *pair = NULL;
 	uint32_t i, dups = 0;
 	char pre1[256] = "", pre2[256] = "";
@@ -196,20 +214,26 @@ void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2) {
 		if (pre1 == NULL) {
 			memcpy(pre1, pair->r1.seq, strlen(pair->r1.seq)+1);
 			memcpy(pre2, pair->r2.seq, strlen(pair->r2.seq)+1);
-			fprintf(out1, "@%s\n%s\n+\n%s\n", pair->r1.header, pair->r1.seq, pair->r1.qual);
-			fprintf(out2, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
-			//printf("%s\t%s\n", pair->r1.seq, pair->r2.seq);
+			if (pair->mt == SOMATIC) {
+				fprintf(out1, "@%s\n%s\n+\n%s\n", pair->r1.header, pair->r1.seq, pair->r1.qual);
+				fprintf(out2, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
+			} else if (pair->mt == GERMLINE) {
+				fprintf(out3, "@%s\n%s\n+\n%s\n", pair->r1.header, pair->r1.seq, pair->r1.qual);
+				fprintf(out4, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
+			}
 		} else {
 			if (strcmp(pre1, pair->r1.seq) == 0 && strcmp(pre2, pair->r2.seq) == 0) {
-			//	put_u32hash(pairs->dups, i)
 				dups ++;
 				continue;
 			}
 			else {
-				//printf("%s\t%s\n", pre1, pre2);
-				fprintf(out1, "@%s\n%s\n+\n%s\n", pair->r1.header, pair->r1.seq, pair->r1.qual);
-				fprintf(out2, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
-				//printf("%s\t%s\n", pair->r1.seq, pair->r2.seq);
+				if (pair->mt == SOMATIC) {
+					fprintf(out1, "@%s\n%s\n+\n%s\n", pair->r1.header, pair->r1.seq, pair->r1.qual);
+					fprintf(out2, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
+				} else if (pair->mt == GERMLINE) {
+					fprintf(out3, "@%s\n%s\n+\n%s\n", pair->r1.header, pair->r1.seq, pair->r1.qual);
+					fprintf(out4, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
+				}
 				memcpy(pre1, pair->r1.seq, strlen(pair->r1.seq)+1);
 				memcpy(pre2, pair->r2.seq, strlen(pair->r2.seq)+1);
 			}
@@ -221,10 +245,10 @@ void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2) {
 	fflush(stdout);
 }
 
-uint64_t filter_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq) {
-	kmer_t KMER;
+void cal_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq) {
+	kmer_t KMER, *ret;
 	Sequence *seq;
-	uint64_t k, r, kmask, ret;
+	uint64_t k, r, kmask;
 	uint32_t i, len, rid;
 //	kmask = (1LLU << (2 * ksize)) - 1;
 	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
@@ -250,13 +274,17 @@ uint64_t filter_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int i
 			} else {
 				KMER.kmer = k;
 			}
-			ret += remove_kmerhash(hash, KMER);
+			ret = get_kmerhash(hash, KMER);
+			if (ret) {
+				if (ret->cnt2 < UNIQ_KMER_MAX_CNT)
+					ret->cnt2 ++;
+			}
 		}
 	}
 	fprintf(stdout, "[%s] processed %10u reads\n", __FUNCTION__, rid);
 	fflush(stdout);
 
-	return ret;
+	//return ret;
 }
 define_list(flist, char*);
 
@@ -297,7 +325,7 @@ int main(int argc, char **argv) {
 	kmer_t KMER;
 	pairv *pairs;
 	FileReader *inf1, *inf2, *ctrlf1, *ctrlf2, *reff;
-	FILE *out, *out1, *out2;
+	FILE *out, *out1, *out2, *out3, *out4;
 	char *in1file, *in2file, *outfile, *ctrl1file, *ctrl2file, *reffile;
 	flist *in1list, *in2list, *ctrl1list, *ctrl2list;
 	in1list = init_flist(2);
@@ -305,7 +333,7 @@ int main(int argc, char **argv) {
 	ctrl1list = init_flist(2);
 	ctrl2list = init_flist(2);
 	int c, is_fq;
-	uint32_t ksize = 27, mincnt = 4, i;
+	uint32_t ksize = 27, mincnt = 4, i, maxcnt2 = 3;
 	uint64_t ret;
 	in1file = in2file = outfile = ctrl1file = ctrl2file = reffile = NULL;
 	
@@ -387,13 +415,23 @@ int main(int argc, char **argv) {
 		abort();
 	}
 
-	if ((out1 = fopen("novo_kmer_read1.fq", "w")) == NULL) {
+	if ((out1 = fopen("somatic_novo_kmer_read1.fq", "w")) == NULL) {
 		fprintf(stderr, " cannot open file to write\n");
 		fflush(stderr);
 		abort();
 	}
 
-	if ((out2 = fopen("novo_kmer_read2.fq", "w")) == NULL) {
+	if ((out2 = fopen("somatic_novo_kmer_read2.fq", "w")) == NULL) {
+		fprintf(stderr, " cannot open file to write\n");
+		fflush(stderr);
+		abort();
+	}
+	if ((out3 = fopen("germline_novo_kmer_read1.fq", "w")) == NULL) {
+		fprintf(stderr, " cannot open file to write\n");
+		fflush(stderr);
+		abort();
+	}
+	if ((out4 = fopen("germline_novo_kmer_read2.fq", "w")) == NULL) {
 		fprintf(stderr, " cannot open file to write\n");
 		fflush(stderr);
 		abort();
@@ -409,17 +447,6 @@ int main(int argc, char **argv) {
 	
 	fclose_filereader(inf1);
 	fclose_filereader(inf2);
-	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
-	fprintf(stdout, "Filtering kmers from control...\n");
-	fflush(stdout);
-	ret = filter_ctrl_kmers(khash, ctrlf1, ksize, is_fq);
-	fprintf(stdout, "Filtered %llu kmer from control file 1\n", (unsigned long long)ret);
-	ret = filter_ctrl_kmers(khash, ctrlf2, ksize, is_fq);
-	fprintf(stdout, "Filtered %llu kmer from control file 2\n", (unsigned long long)ret);
-	fflush(stdout);
-	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
-	fprintf(stdout, "There are still %llu kmers left\n\n", (unsigned long long)count_kmerhash(khash));
-	fflush(stdout);
 
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Filtering kmers from reference...\n");
@@ -430,24 +457,55 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "There are still %llu kmers left\n\n", (unsigned long long)count_kmerhash(khash));
 	fflush(stdout);
-//	qsort(khash->array, (unsigned long long)count_kmerhash(khash), sizeof(kmer_t), cmp_kmer);
+	
+	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
+	fprintf(stdout, "Calculating kmers from control...\n");
+	fflush(stdout);
+	cal_ctrl_kmers(khash, ctrlf1, ksize, is_fq);
+	//fprintf(stdout, "Filtered %llu kmer from control file 1\n", (unsigned long long)ret);
+	cal_ctrl_kmers(khash, ctrlf2, ksize, is_fq);
+	//fprintf(stdout, "Filtered %llu kmer from control file 2\n", (unsigned long long)ret);
+	//fflush(stdout);
+	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
+	//fprintf(stdout, "There are still %llu kmers left\n\n", (unsigned long long)count_kmerhash(khash));
+	fflush(stdout);
+
 	ret = 0;
 	inf1 = fopen_m_filereader(count_flist(in1list), as_array_flist(in1list));
 	inf2 = fopen_m_filereader(count_flist(in2list), as_array_flist(in2list));
-	pairs =  loadkmerseq(khash, ksize, mincnt, inf1, inf2);
-	dedup_pairs(pairs, out1, out2);
+	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
+	fprintf(stdout, "Loading sequences...\n");
+	fflush(stdout);
+	pairs =  loadkmerseq(khash, ksize, mincnt, maxcnt2, inf1, inf2); //TODO
+	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
+	fprintf(stdout, "There are %llu pairs loaded\n\n", (unsigned long long)count_pairv(pairs));
+	fflush(stdout);
+	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
+	fprintf(stdout, "Remove duplicate sequences...\n");
+	fflush(stdout);
+	dedup_pairs(pairs, out1, out2, out3, out4);
+	fprintf(stdout, "[%s]\n\n", date()); fflush(stdout);
+	fflush(stdout);
 	reset_iter_kmerhash(khash);
 	while (iter_kmerhash(khash, &KMER)) {
+		//if (KMER.cnt < mincnt || KMER.cnt2 > maxcnt2) continue;
 		if (KMER.cnt < mincnt) continue;
-		ret ++;
-		for (i = 0; i < ksize; i++) {
-			fprintf(out, "%c", bit_base_table[(KMER.kmer >> ((ksize-1-i) << 1)) & 0x03]);
+		if (KMER.cnt2 < maxcnt2 && (float)KMER.cnt2/(KMER.cnt+KMER.cnt2) < 0.01) {
+			ret ++;
+			for (i = 0; i < ksize; i++) {
+				fprintf(out, "%c", bit_base_table[(KMER.kmer >> ((ksize-1-i) << 1)) & 0x03]);
+			}
+			fprintf(out, "\t%llu\t%llu\t%s\n", (unsigned long long)KMER.cnt, (unsigned long long)KMER.cnt2, "SOMATIC");
+		} else if (KMER.cnt2 > maxcnt2*2) {
+			ret ++;
+			for (i = 0; i < ksize; i++) {
+				fprintf(out, "%c", bit_base_table[(KMER.kmer >> ((ksize-1-i) << 1)) & 0x03]);
+			}
+			fprintf(out, "\t%llu\t%llu\t%s\n", (unsigned long long)KMER.cnt, (unsigned long long)KMER.cnt2, "GERMLINE");
 		}
-//		bits2seq(seq, &KMER.kmer, 0, ksize);
-		fprintf(out, "\t%llu\n", (unsigned long long)KMER.cnt);
 	}
 	
-	fprintf(stdout, "%llu kmers passed the minimum frequency cutoff (%u)\n", (unsigned long long)ret, mincnt);
+	fprintf(stdout, "%llu kmers passed the minimum frequency cutoff in tumor (%u) and maximum frequency cutoff in normal (%u)\n", (unsigned long long)ret, mincnt, maxcnt2);
 	fflush(stdout);
 	destroy_pairv(pairs);
 	free_kmerhash(khash);
@@ -461,6 +519,10 @@ int main(int argc, char **argv) {
 	fclose_filereader(ctrlf2);
 	fclose_filereader(reff);
 	fclose(out);
+	fclose(out1);
+	fclose(out2);
+	fclose(out3);
+	fclose(out4);
 	fprintf(stderr, "Program exit normally\n");
 	return 0;
 }

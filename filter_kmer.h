@@ -35,7 +35,7 @@
 #define UNIQ_KMER_MAX_CNT 3071
 
 typedef struct {
-	uint64_t kmer, cnt:12;
+	uint64_t kmer, cnt:12, cnt2:12;
 } kmer_t;
 
 typedef struct {
@@ -45,9 +45,13 @@ typedef struct {
 	char *qual;
 } pair;
 
+typedef enum {SOMATIC, GERMLINE, LOH} mut_type;
+
 typedef struct {
 	pair r1;
 	pair r2;
+	mut_type mt;
+
 } pair_t;
 
 define_list(pairv, pair_t);
@@ -62,10 +66,10 @@ extern "C" {
 #endif
 
 kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash);
-uint64_t filter_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq);
+void cal_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq);
 uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize);
-pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, FileReader *f1, FileReader *f2);
-void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2);
+pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, FileReader *f1, FileReader *f2);
+void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2, FILE *out3, FILE *out4);
 void destroy_pairv(pairv *pairs);
 
 #ifdef __CPLUSPLUS
