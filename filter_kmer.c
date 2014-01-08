@@ -104,8 +104,8 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 	kmer_t KMER, *ret;
 	Sequence *read[2];
 	int is_fq[2];
-	uint32_t rid, len, i, j;
-	char *seq;
+	uint32_t rid, len, i, j, ii, len_head;
+	char *seq, kmer_seq[256];
 	uint64_t k, kmask = (1LLU << (2 * ksize)) - 1, r;
 
 	read[0] = read[1] = NULL;
@@ -140,15 +140,29 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 				if (ret == NULL || ret->cnt < mincnt)  {
 					continue;
 				} 
+				for (ii = 0; ii < ksize; ii++) {
+					kmer_seq[ii] = bit_base_table[(KMER.kmer >> ((ksize-1-ii) << 1)) & 0x03];
+				}
+				kmer_seq[ii] = '\0';
 				if (ret->cnt2 < maxcnt2 && (float)ret->cnt2/(ret->cnt+ret->cnt2) < 0.01) { //TODO magic number
 					pair = next_ref_pairv(pairs);
 					pair->mt = SOMATIC;
 					pair->r1.name = strdup(read[0]->name.string);
-					pair->r1.header = strdup(read[0]->header.string);
+					len_head = strlen(read[0]->header.string); 
+					pair->r1.header = malloc(ksize + len_head + 2);
+					memcpy(pair->r1.header, kmer_seq, ksize);
+					pair->r1.header[ksize] = '_';
+					memcpy(pair->r1.header+ksize+1, read[0]->header.string, len_head+1);
+					//pair->r1.header = strdup(read[0]->header.string);
 					pair->r1.seq = strdup(read[0]->seq.string);
 					pair->r1.qual = strdup(read[0]->qual.string);
 					pair->r2.name = strdup(read[1]->name.string);
-					pair->r2.header = strdup(read[1]->header.string);
+					len_head = strlen(read[1]->header.string); 
+					pair->r2.header = malloc(ksize + len_head + 2);
+					memcpy(pair->r2.header, kmer_seq, ksize);
+					pair->r2.header[ksize] = '_';
+					memcpy(pair->r2.header+ksize+1, read[1]->header.string, len_head+1);
+					//pair->r2.header = strdup(read[1]->header.string);
 					pair->r2.seq = strdup(read[1]->seq.string);
 					pair->r2.qual = strdup(read[1]->qual.string);
 				}
@@ -156,11 +170,21 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 					pair = next_ref_pairv(pairs);
 					pair->mt = GERMLINE;
 					pair->r1.name = strdup(read[0]->name.string);
-					pair->r1.header = strdup(read[0]->header.string);
+					len_head = strlen(read[0]->header.string); 
+					pair->r1.header = malloc(ksize + len_head + 2);
+					memcpy(pair->r1.header, kmer_seq, ksize);
+					pair->r1.header[ksize] = '_';
+					memcpy(pair->r1.header+ksize+1, read[0]->header.string, len_head+1);
+					//pair->r1.header = strdup(read[0]->header.string);
 					pair->r1.seq = strdup(read[0]->seq.string);
 					pair->r1.qual = strdup(read[0]->qual.string);
 					pair->r2.name = strdup(read[1]->name.string);
-					pair->r2.header = strdup(read[1]->header.string);
+					len_head = strlen(read[1]->header.string); 
+					pair->r2.header = malloc(ksize + len_head + 2);
+					memcpy(pair->r2.header, kmer_seq, ksize);
+					pair->r2.header[ksize] = '_';
+					memcpy(pair->r2.header+ksize+1, read[1]->header.string, len_head+1);
+					//pair->r2.header = strdup(read[1]->header.string);
 					pair->r2.seq = strdup(read[1]->seq.string);
 					pair->r2.qual = strdup(read[1]->qual.string);
 				}
