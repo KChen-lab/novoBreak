@@ -98,7 +98,7 @@ uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize) {
 	return ret;
 }
 
-pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, FileReader *f1, FileReader *f2) {
+pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, FileReader *f1, FileReader *f2, int is_somatic) {
 	pairv *pairs = init_pairv(4);
 	pair_t *pair;
 	kmer_t KMER, *ret;
@@ -116,7 +116,7 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 	is_fq[1] = (guess_seq_file_type(f2) == 2);
 
 	while (1) {
-		label:
+		//label:
 		if (!(is_fq[0]?fread_fastq(&read[0], f1):fread_fasta(&read[0], f1)))  break;
 		if (!(is_fq[1]?fread_fastq(&read[1], f2):fread_fasta(&read[1], f2)))  break;
 		rid ++;
@@ -127,6 +127,7 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 			seq = read[i]->seq.string;
 			len = read[i]->seq.size;
 			k = 0;
+			//fprintf(stderr, "seq%d\t%s\n", i, seq);
 			for (j = 0; j < len; j++) {
 				k = ((k << 2) | base_bit_table[(int)seq[j]]) & kmask;
 				if (j + 1 < ksize) continue;
@@ -141,7 +142,7 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 					continue;
 				} 
 				for (ii = 0; ii < ksize; ii++) {
-					kmer_seq[ii] = bit_base_table[(KMER.kmer >> ((ksize-1-ii) << 1)) & 0x03];
+					kmer_seq[ii] = bit_base_table[(ret->kmer >> ((ksize-1-ii) << 1)) & 0x03];
 				}
 				kmer_seq[ii] = '\0';
 				if (ret->cnt2 < maxcnt2 && (float)ret->cnt2/(ret->cnt+ret->cnt2) < 0.01) { //TODO magic number
@@ -165,8 +166,11 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 					//pair->r2.header = strdup(read[1]->header.string);
 					pair->r2.seq = strdup(read[1]->seq.string);
 					pair->r2.qual = strdup(read[1]->qual.string);
+					//fprintf(stderr, "type=%d\t@%s\n%s\n+\n%s\n", pair->mt, pair->r1.header, pair->r1.seq, pair->r1.qual);
+					//fprintf(stderr, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
 				}
 				else if (ret->cnt2 > maxcnt2 * 2) { //TODO magic number
+					if (is_somatic) continue;
 					pair = next_ref_pairv(pairs);
 					pair->mt = GERMLINE;
 					pair->r1.name = strdup(read[0]->name.string);
@@ -188,7 +192,7 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 					pair->r2.seq = strdup(read[1]->seq.string);
 					pair->r2.qual = strdup(read[1]->qual.string);
 				}
-				goto label;
+				//goto label;
 			}
 		}
 	}
@@ -216,8 +220,12 @@ void destroy_pairv(pairv *pairs) {
 
 static inline int cmp_pair_func(pair_t p1, pair_t p2, void *obj) {
 
-	if (strcmp(p1.r1.seq, p2.r1.seq) == 0 && strcmp(p1.r2.seq, p2.r2.seq) == 0)
-		return 0;
+	if (strcmp(p1.r1.seq, p2.r1.seq) == 0 && strcmp(p1.r2.seq, p2.r2.seq) == 0) {
+		if (p1.mt == p2.mt)
+			return 0;
+		else 
+			return p1.mt-p2.mt;
+	}
 
 
 	return strcmp(p1.r1.seq, p2.r1.seq);
@@ -230,14 +238,16 @@ void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2, FILE *out3, FILE *out4) {
 	pair_t *pair = NULL;
 	uint32_t i, dups = 0;
 	char pre1[256] = "", pre2[256] = "";
+	mut_type pre_t = SOMATIC;
 
 	sort_pairs(ref_pairv(pairs, 0), count_pairv(pairs), NULL);
 	
 	for (i = 0; i < count_pairv(pairs); i++) {
 		pair = ref_pairv(pairs, i);
-		if (pre1 == NULL) {
+		if (pre1[0] == '\0') {
 			memcpy(pre1, pair->r1.seq, strlen(pair->r1.seq)+1);
 			memcpy(pre2, pair->r2.seq, strlen(pair->r2.seq)+1);
+			pre_t = pair->mt;
 			if (pair->mt == SOMATIC) {
 				fprintf(out1, "@%s\n%s\n+\n%s\n", pair->r1.header, pair->r1.seq, pair->r1.qual);
 				fprintf(out2, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
@@ -246,7 +256,7 @@ void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2, FILE *out3, FILE *out4) {
 				fprintf(out4, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
 			}
 		} else {
-			if (strcmp(pre1, pair->r1.seq) == 0 && strcmp(pre2, pair->r2.seq) == 0) {
+			if (strcmp(pre1, pair->r1.seq) == 0 && strcmp(pre2, pair->r2.seq) == 0 && pre_t == pair->mt) {
 				dups ++;
 				continue;
 			}
@@ -260,9 +270,10 @@ void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2, FILE *out3, FILE *out4) {
 				}
 				memcpy(pre1, pair->r1.seq, strlen(pair->r1.seq)+1);
 				memcpy(pre2, pair->r2.seq, strlen(pair->r2.seq)+1);
+				pre_t = pair->mt;
 			}
 		}
-		//printf("%s\t%s\n", pair->r1.seq.string, pair->r2.seq.string);
+		//fprintf(stderr, "type%d\t%s\t%s\n", pair->mt, pair->r1.seq, pair->r2.seq);
 	}
 //	printf("%s\t%s\n", pre1, pre2);
 	fprintf(stdout, "[%s] removed %u duplicated read pairs\n", __FUNCTION__, dups);
@@ -338,6 +349,7 @@ int usage() {
 		   "  -r <string>    Reference file in fasta format\n"
            "  -k <int>       Kmer size, <=31 [27]\n"
 		   "  -o <string>    Output kmer\n"
+		   "  -g <int>       Output germline events [0]\n"  
 		   "  -m <int>       Minimum kmer count regarded as novo kmers [4]\n"
 		   );
 
@@ -356,12 +368,12 @@ int main(int argc, char **argv) {
 	in2list = init_flist(2);
 	ctrl1list = init_flist(2);
 	ctrl2list = init_flist(2);
-	int c, is_fq;
+	int c, is_fq, is_somatic = 1;
 	uint32_t ksize = 27, mincnt = 4, i, maxcnt2 = 3;
 	uint64_t ret;
 	in1file = in2file = outfile = ctrl1file = ctrl2file = reffile = NULL;
 	
-	while ((c = getopt(argc, argv, "h1:2:3:4:k:o:m:r:")) != -1) {
+	while ((c = getopt(argc, argv, "h1:2:3:4:k:o:m:r:g")) != -1) {
 		switch (c) {
 			case 'h': return usage();
 			case '1': push_flist(in1list, optarg); break;
@@ -372,6 +384,7 @@ int main(int argc, char **argv) {
 			case 'o': outfile = optarg; break;
 			case 'm': mincnt = atoi(optarg); break;
 			case 'r': reffile = optarg; break;
+			case 'g': is_somatic = 0; break;
 			default: return usage();
 		}
 	}
@@ -500,7 +513,7 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Loading sequences...\n");
 	fflush(stdout);
-	pairs =  loadkmerseq(khash, ksize, mincnt, maxcnt2, inf1, inf2); //TODO
+	pairs =  loadkmerseq(khash, ksize, mincnt, maxcnt2, inf1, inf2, is_somatic); //TODO
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "There are %llu pairs loaded\n\n", (unsigned long long)count_pairv(pairs));
 	fflush(stdout);
