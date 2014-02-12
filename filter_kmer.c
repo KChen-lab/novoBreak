@@ -19,7 +19,7 @@
 
 
 #include "filter_kmer.h"
-
+// 02/12/2014 4:12pm
 
 kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash) {
 	kmer_t KMER, *kmer;
