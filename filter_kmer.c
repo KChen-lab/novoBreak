@@ -148,6 +148,8 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 				if (ret->cnt2 < maxcnt2 && (float)ret->cnt2/(ret->cnt+ret->cnt2) < 0.01) { //TODO magic number
 					pair = next_ref_pairv(pairs);
 					pair->mt = SOMATIC;
+					pair->pid = rid;
+					/*
 					pair->r1.name = strdup(read[0]->name.string);
 					len_head = strlen(read[0]->header.string); 
 					pair->r1.header = malloc(ksize + len_head + 2);
@@ -166,6 +168,7 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 					//pair->r2.header = strdup(read[1]->header.string);
 					pair->r2.seq = strdup(read[1]->seq.string);
 					pair->r2.qual = strdup(read[1]->qual.string);
+					*/
 					//fprintf(stderr, "type=%d\t@%s\n%s\n+\n%s\n", pair->mt, pair->r1.header, pair->r1.seq, pair->r1.qual);
 					//fprintf(stderr, "@%s\n%s\n+\n%s\n", pair->r2.header, pair->r2.seq, pair->r2.qual);
 				}
@@ -173,6 +176,8 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 					if (is_somatic) continue;
 					pair = next_ref_pairv(pairs);
 					pair->mt = GERMLINE;
+					pair->pid = rid;
+					/*
 					pair->r1.name = strdup(read[0]->name.string);
 					len_head = strlen(read[0]->header.string); 
 					pair->r1.header = malloc(ksize + len_head + 2);
@@ -191,6 +196,7 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 					//pair->r2.header = strdup(read[1]->header.string);
 					pair->r2.seq = strdup(read[1]->seq.string);
 					pair->r2.qual = strdup(read[1]->qual.string);
+					*/
 				}
 				//goto label;
 			}
@@ -200,27 +206,22 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 	return pairs;
 }
 
-static inline void destroy_pair(pair *pair) {
-	free(pair->name);
-	free(pair->header);
-	free(pair->seq);
-	free(pair->qual);
-}
 void destroy_pairv(pairv *pairs) {
 	pair_t *pair;
 	uint32_t i;
-
+/*
 	for (i = 0; i < count_pairv(pairs); i++) {
 		pair = ref_pairv(pairs, i);
 		destroy_pair(&pair->r1);
 		destroy_pair(&pair->r2);
 	}
+*/
 	free_pairv(pairs);
 }
 
 static inline int cmp_pair_func(pair_t p1, pair_t p2, void *obj) {
 
-	if (strcmp(p1.r1.seq, p2.r1.seq) == 0 && strcmp(p1.r2.seq, p2.r2.seq) == 0) {
+	if (p1.pid == p2.pid) {
 		if (p1.mt == p2.mt)
 			return 0;
 		else 
@@ -228,7 +229,7 @@ static inline int cmp_pair_func(pair_t p1, pair_t p2, void *obj) {
 	}
 
 
-	return strcmp(p1.r1.seq, p2.r1.seq);
+	return p1.pid-p2.pid;
 	obj = obj;
 }
 
@@ -244,6 +245,8 @@ void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2, FILE *out3, FILE *out4) {
 	
 	for (i = 0; i < count_pairv(pairs); i++) {
 		pair = ref_pairv(pairs, i);
+		fprintf(stdout, "%u\n", pair->pid);
+		/*
 		if (pre1[0] == '\0') {
 			memcpy(pre1, pair->r1.seq, strlen(pair->r1.seq)+1);
 			memcpy(pre2, pair->r2.seq, strlen(pair->r2.seq)+1);
@@ -273,6 +276,7 @@ void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2, FILE *out3, FILE *out4) {
 				pre_t = pair->mt;
 			}
 		}
+		*/
 		//fprintf(stderr, "type%d\t%s\t%s\n", pair->mt, pair->r1.seq, pair->r2.seq);
 	}
 //	printf("%s\t%s\n", pre1, pre2);

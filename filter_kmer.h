@@ -48,8 +48,7 @@ typedef struct {
 typedef enum {SOMATIC, GERMLINE, LOH} mut_type;
 
 typedef struct {
-	pair r1;
-	pair r2;
+	uint32_t pid;
 	mut_type mt;
 
 } pair_t;
