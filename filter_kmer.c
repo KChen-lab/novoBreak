@@ -430,9 +430,9 @@ inline int cmp_kmer(const void *e1, const void *e2) {
 
 
 int usage() {
-	printf("clinsek - a tool for diagnosing known variations and discovering new (somatic) ones\n"
-		   "Auther: Zechen Chong <chongzechen@gmail.com> & Wanding Zhou <zhouwanding@gmail.com>\n"
-		   "Version: 1.01 (r20131023)\n"
+	printf("novoBreak - a tool for diagnosing known variations and discovering new (somatic) ones\n"
+		   "Auther: Zechen Chong <zchong@mdanderson.org> \n"
+		   "Version: 1.02 (r20140305)\n"
 		   "Usage:\n"
 		   "  clinsek -1 <tumor_1.fq(.gz)> -2 <tumor_2.fq(.gz)> -3 <normal_1.fq(.gz)> -4 <normal_2.fq(.gz)> -r <reference> -o <output.kmer> [options]\n"
 		   "Options:\n"
