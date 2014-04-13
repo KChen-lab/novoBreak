@@ -20,7 +20,7 @@
 
 #include "filter_kmer.h"
 
-kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash) {
+kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash, kmerhash* refhash) {
 	kmer_t KMER, *kmer;
 	uint64_t k, r, kmask;
 	uint32_t i, j, len, rid, lowq_num;
@@ -62,6 +62,55 @@ kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* ha
 			} else {
 				KMER.kmer = k;
 			}
+			if (!exists_kmerhash(refhash, KMER)) {
+				kmer = prepare_kmerhash(hash, KMER, &exists);
+				if (exists) {
+					if (kmer->cnt < UNIQ_KMER_MAX_CNT)
+						kmer->cnt ++;
+				} else {
+					kmer->kmer = KMER.kmer;
+					kmer->cnt = 1;
+					kmer->cnt2 = 0;
+				}
+			}
+		}
+	}
+	fprintf(stdout, "[%s] processed %10u reads\n", __FUNCTION__, rid);
+	fflush(stdout);
+	return hash;
+}
+
+kmerhash* build_refkmerhash(FileReader *fr, uint32_t ksize, kmerhash* hash) {
+	kmer_t KMER, *kmer;
+	uint64_t k, r, kmask;
+	uint32_t i, len;
+	int exists;
+	Sequence *seq;
+	KMER.cnt = 0;
+	KMER.cnt2 = 0;
+	KMER.kmer = 0;
+//	kmask = (1LLU << (2 * ksize)) - 1;
+	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
+	seq = NULL;
+	fprintf(stdout, "Building reference kmer...\n");
+	fflush(stdout);
+	while (fread_fasta(&seq, fr)) {
+		fprintf(stdout, "Building %s\r", seq->name.string);
+		fflush(stdout);
+		k = 0;
+		len = seq->seq.size;
+
+		for (i = 0; i < ksize-1; i++) {
+			k = (k << 2) | base_bit_table[(int)seq->seq.string[i]];
+		}
+		for (i = 0; i <= len-ksize; i++) {
+			k = ((k << 2) | base_bit_table[(int)seq->seq.string[i+ksize-1]])  & kmask;
+			r = dna_rev_seq(k, ksize);
+			if (r < k) {
+				KMER.kmer = r;
+			} else {
+				KMER.kmer = k;
+			}
 			kmer = prepare_kmerhash(hash, KMER, &exists);
 			if (exists) {
 				if (kmer->cnt < UNIQ_KMER_MAX_CNT)
@@ -73,7 +122,7 @@ kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* ha
 			}
 		}
 	}
-	fprintf(stdout, "[%s] processed %10u reads\n", __FUNCTION__, rid);
+	fprintf(stdout, "Finished reference kmer building\n");
 	fflush(stdout);
 	return hash;
 }
@@ -452,7 +501,7 @@ int usage() {
 }
 
 int main(int argc, char **argv) {
-	kmerhash *khash;
+	kmerhash *khash, *refhash;
 	kmer_t KMER;
 	pairv *pairs;
 	FileReader *inf1, *inf2, *ctrlf1, *ctrlf2, *reff;
@@ -569,17 +618,20 @@ int main(int argc, char **argv) {
 		abort();
 	}
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
-	fprintf(stdout, "Building kmer...\n");
-	fflush(stdout);
 	khash = init_kmerhash(1023);
-	khash = build_kmerhash(inf1, ksize, is_fq, khash);
-	khash = build_kmerhash(inf2, ksize, is_fq, khash);
+	refhash = init_kmerhash(1023);
+	refhash = build_refkmerhash(reff, ksize, refhash);
+	fprintf(stdout, "Building kmer...\n");
+	khash = build_kmerhash(inf1, ksize, is_fq, khash, refhash);
+	khash = build_kmerhash(inf2, ksize, is_fq, khash, refhash);
 	fprintf(stdout, " %llu kmers loaded\n\n", (unsigned long long)count_kmerhash(khash));
 	fflush(stdout);
 	
 	fclose_filereader(inf1);
 	fclose_filereader(inf2);
 
+	free_kmerhash(refhash);
+/*
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Filtering kmers from reference...\n");
 	fflush(stdout);
@@ -589,7 +641,7 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "There are still %llu kmers left\n\n", (unsigned long long)count_kmerhash(khash));
 	fflush(stdout);
-	
+*/	
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Calculating kmers from control...\n");
 	fflush(stdout);

@@ -64,7 +64,8 @@ define_hashset(kmerhash, kmer_t, kmer_hashcode, kmer_equals);
 extern "C" {
 #endif
 
-kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash);
+kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash, kmerhash* refhash);
+kmerhash* build_refkmerhash(FileReader *fr, uint32_t ksize, kmerhash* hash);
 void cal_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq);
 uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize);
 pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, FileReader *f1, FileReader *f2, int is_somatic);
