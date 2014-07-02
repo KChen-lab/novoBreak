@@ -467,9 +467,9 @@ inline int cmp_kmer(const void *e1, const void *e2) {
 
 
 int usage() {
-	printf("novoBreak - a tool for diagnosing known variations and discovering new (somatic) ones\n"
+	printf("novoBreak - a tool for discovering somatic sv breakpoints\n"
 		   "Auther: Zechen Chong <zchong@mdanderson.org> \n"
-		   "Version: 1.02 (r20140305)\n"
+		   "Version: 1.04 (r20140701)\n"
 		   "Usage:\n"
 		   "  clinsek -1 <tumor_1.fq(.gz)> -2 <tumor_2.fq(.gz)> -3 <normal_1.fq(.gz)> -4 <normal_2.fq(.gz)> -r <reference> -o <output.kmer> [options]\n"
 		   "Options:\n"
@@ -504,7 +504,7 @@ int main(int argc, char **argv) {
 	uint32_t ksize = 27, mincnt = 4, i, maxcnt2 = 3;
 	uint64_t ret;
 	in1file = in2file = outfile = ctrl1file = ctrl2file = reffile = NULL;
-	
+
 	while ((c = getopt(argc, argv, "h1:2:3:4:k:o:m:r:g")) != -1) {
 		switch (c) {
 			case 'h': return usage();

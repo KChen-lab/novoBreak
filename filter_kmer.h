@@ -32,7 +32,7 @@
 #include "bitvec.h"
 
 #define UNIQ_KMER_MAX_KSIZE 31
-#define UNIQ_KMER_MAX_CNT 3071
+#define UNIQ_KMER_MAX_CNT 999
 
 typedef struct {
 	uint64_t kmer, cnt:16, cnt2:16;
