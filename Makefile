@@ -9,7 +9,7 @@ all: novobreak nbasm
 novobreak: $(GENERIC_SRC) filter_kmer.c sr_aln.h sr_aln.c aln_cigar.h simp_asm.h stdaln.h stdaln.c
 	$(CC) $(CFLAGS) $(INCLUDE) $(LIBPATH) -o $@ file_reader.c sr_aln.c stdaln.c filter_kmer.c $(GLIBS)
 
-nbasm: $(GENERIC_SRC) file_reader.c asm_R2.c  localasm_main.c
+nbasm: file_reader.c asm_R2.c  localasm_main.c
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 clean:

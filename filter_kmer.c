@@ -283,7 +283,7 @@ void destroy_pairv(pairv *pairs) {
 */
 	free_pairv(pairs);
 }
-
+/*
 static inline int cmp_pair_func(pair_t p1, pair_t p2, void *obj) {
 
 	if (p1.pid == p2.pid) {
@@ -299,18 +299,7 @@ static inline int cmp_pair_func(pair_t p1, pair_t p2, void *obj) {
 }
 
 define_quick_sort(sort_pairs, pair_t, cmp_pair_func);
-
-inline int trim_lowq(char *qual, int len, char min) {
-	int i;
-	for (i = 0; i < len; i++) {
-		if (qual[i] <= min) {
-			if (i+1 < len && qual[i+1] <= min) {
-				break;
-			}
-		}
-	}
-	return i;
-}
+*/
 
 void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2, FILE *out3, FILE *out4, FileReader *f1, FileReader *f2) {
 	pair_t *pair = NULL;
@@ -465,7 +454,6 @@ void cal_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq) {
 
 	//return ret;
 }
-define_list(flist, char*);
 
 inline int cmp_kmer(const void *e1, const void *e2) {
 	kmer_t *k1, *k2;

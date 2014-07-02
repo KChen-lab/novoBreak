@@ -70,7 +70,8 @@ static inline String* init_string(string_size_t cap){
 
 static inline size_t string_obj_desc_cnt(void *obj, int idx){
 	return ((String*)obj)->size + 1;
-	idx = idx;
+	int idx2 = 0;
+	idx2 = idx;
 }
 
 static const obj_desc_t string_obj_desc = {sizeof(String), 1, {offsetof(String, string)}, {(obj_desc_t*)&OBJ_DESC_ARRAY}, string_obj_desc_cnt};

@@ -35,7 +35,7 @@
 #define UNIQ_KMER_MAX_CNT 3071
 
 typedef struct {
-	uint64_t kmer, cnt:12, cnt2:12;
+	uint64_t kmer, cnt:16, cnt2:16;
 } kmer_t;
 
 typedef struct {
@@ -54,11 +54,24 @@ typedef struct {
 } pair_t;
 
 define_list(pairv, pair_t);
+define_list(flist, char*);
 
 
 #define kmer_hashcode(k) u64hashcode((k).kmer)
 #define kmer_equals(k1, k2) ((k1).kmer == (k2).kmer)
 define_hashset(kmerhash, kmer_t, kmer_hashcode, kmer_equals);
+
+static inline int trim_lowq(char *qual, int len, char min) {
+	int i;
+	for (i = 0; i < len; i++) {
+		if (qual[i] <= min) {
+			if (i+1 < len && qual[i+1] <= min) {
+				break;
+			}
+		}
+	}
+	return i;
+}
 
 #ifdef __CPLUSPLUS
 extern "C" {

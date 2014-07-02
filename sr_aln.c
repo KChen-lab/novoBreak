@@ -160,7 +160,8 @@ int sr_push_sdb(SR_SeqDB *sdb, char *seq, uint16_t seqlen){
 void sr_ready_sdb(SR_SeqDB *sdb){
 	encap_u64list(sdb->rd_seqs, (sdb->offset + 128) / 32 + 2);
 	return;
-	sdb = sdb;
+	SR_SeqDB *db = NULL;
+	db = sdb;
 }
 
 void sr_reset_sdb(SR_SeqDB *sdb){
