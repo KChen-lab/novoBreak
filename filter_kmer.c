@@ -61,6 +61,8 @@ BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec* bt, u64
 				KMER = k;
 			}
 			if (exists_u64hash(refhash, KMER)) {
+				if (bt->n_cap < *idx + 1024)
+					encap_bitvec(bt, 1024);
 				one_bitvec(ret, *idx);
 			}
 			*idx = *idx+1;
