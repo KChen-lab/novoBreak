@@ -194,8 +194,8 @@ int fread_line2(String *line, FileReader *fr){
 			}
 			n = fr_fread(fr->buffer + fr->size, sizeof(char), fr->capacity - fr->size, ((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file);
 			if(n == 0){
-				fclose(((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file);
-				((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file = NULL;
+				//fclose(((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file);
+				//((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->file = NULL;
 				fr->fidx ++;
 				if(fr->fidx < fr->files->size){
 					if(((fr_file_t*)ref_fr_filev(fr->files, fr->fidx))->is_proc){

@@ -77,8 +77,9 @@ static inline int trim_lowq(char *qual, int len, char min) {
 extern "C" {
 #endif
 
-kmerhash* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, kmerhash* hash, kmerhash* refhash);
-kmerhash* build_refkmerhash(FileReader *fr, uint32_t ksize, kmerhash* hash);
+BitVec* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, BitVec* bt, u64hash* refhash, uint64_t *idx);
+kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhash *hash, BitVec* bt, uint64_t *idx);
+kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *read2fr, int is_fq, uint32_t ksize, kmerhash* hash);
 void cal_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq);
 uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize);
 pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, FileReader *f1, FileReader *f2, int is_somatic);
