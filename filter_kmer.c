@@ -20,7 +20,7 @@
 
 #include "filter_kmer.h"
 
-BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec* bt, u64hash* refhash, uint64_t *idx) {
+BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec *bt, u64hash *refhash, uint64_t *idx) {
 	uint64_t KMER;
 	BitVec* ret = bt;
 	uint64_t k, r, kmask;
@@ -39,6 +39,7 @@ BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec* bt, u64
 			fflush(stdout);
 		}
 		k = 0;
+		//fprintf(stdout, "rid = %u %s\n", rid, seq->seq.string); fflush(stdout);
 		len = seq->seq.size;
 		quality = seq->qual.string;
 		lowq_num = 0;
@@ -46,12 +47,12 @@ BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec* bt, u64
 			if (quality[j] <= '#') lowq_num ++;
 		}
 		if ((float)lowq_num/len >= 0.5) continue; // too many low quality bases
-		encap_bitvec(bt, 1024);
+		//encap_bitvec(bt, 1024);
 		for (i = 0; i < ksize-1; i++) {
 			k = (k << 2) | base_bit_table[(int)seq->seq.string[i]];
 		}
 		for (i = 0; i <= len-ksize; i++) {
-			if (quality[i+ksize-1] <= '#' && i+ksize < len && quality[i+ksize] <= '#') continue; // trim ends with low qualities
+			if (quality[i+ksize-1] <= '#' && i+ksize < len && quality[i+ksize] <= '#') break; // trim ends with low qualities
 			k = ((k << 2) | base_bit_table[(int)seq->seq.string[i+ksize-1]])  & kmask;
 			//if (i + 1 < ksize) continue;
 			r = dna_rev_seq(k, ksize);
@@ -61,8 +62,6 @@ BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec* bt, u64
 				KMER = k;
 			}
 			if (exists_u64hash(refhash, KMER)) {
-				if (bt->n_cap < *idx + 1024)
-					encap_bitvec(bt, 1024);
 				one_bitvec(ret, *idx);
 			}
 			*idx = *idx+1;
@@ -73,7 +72,7 @@ BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec* bt, u64
 	return ret;
 }
 
-kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhash *hash, BitVec* bt, uint64_t *idx) {
+kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhash *hash, BitVec *bt, uint64_t *idx) {
 	kmer_t KMER, *kmer;
 	uint64_t k, r, kmask;
 	uint32_t i, j, len, rid, lowq_num;
@@ -101,12 +100,12 @@ kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhas
 			if (quality[j] <= '#') lowq_num ++;
 		}
 		if ((float)lowq_num/len >= 0.5) continue; // too many low quality bases
-		encap_bitvec(bt, 1024);
+		//encap_bitvec(bt, 1024);
 		for (i = 0; i < ksize-1; i++) {
 			k = (k << 2) | base_bit_table[(int)seq->seq.string[i]];
 		}
 		for (i = 0; i <= len-ksize; i++) {
-			if (quality[i+ksize-1] <= '#' && i+ksize < len && quality[i+ksize] <= '#') continue; // trim ends with low qualities
+			if (quality[i+ksize-1] <= '#' && i+ksize < len && quality[i+ksize] <= '#') break; // trim ends with low qualities
 			k = ((k << 2) | base_bit_table[(int)seq->seq.string[i+ksize-1]])  & kmask;
 			//if (i + 1 < ksize) continue;
 			r = dna_rev_seq(k, ksize);
@@ -138,9 +137,9 @@ kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhas
 kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *read2fr, int is_fq, uint32_t ksize, kmerhash* hash) {
 	uint64_t KMER, *kmer;
 	uint64_t k, r, kmask;
-	uint32_t i, len;
+	uint32_t i, len, rdlen = 101, rdnum = 0;
 	int exists;
-	BitVec *bt = init_bitvec(1024*1024);
+	BitVec *bt = init_bitvec(1024);
 	uint64_t idx = 0;
 	u64hash *refhash = init_u64hash(1023);
 	Sequence *seq;
@@ -183,7 +182,19 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 			*/
 		}
 	}
-	//printf("hash size = %llu\n", (unsigned long long)refhash->e_size * hash->size);
+	//printf("hash size = %llu\n", (unsigned long long)refhash->e_size * refhash->size);
+	fprintf(stdout, "Calculating number of paired reads ...\n");fflush(stdout);
+	if (is_fq?fread_fastq_adv(&seq, read1fr, FASTQ_FLAG_NO_NAME):fread_fasta_adv(&seq, read1fr, FASTA_FLAG_NO_NAME)) {
+		rdlen = seq->seq.size;
+	}
+	free_sequence(seq);
+	reset_filereader(read1fr);
+	rdnum = count_readnum(read1fr, is_fq);
+	fprintf(stdout, "There are a total of %u pairs of reads\n", rdnum);fflush(stdout);
+	encap_bitvec(bt, rdnum*2*(rdlen-ksize+1));
+	zeros_bitvec(bt);
+	reset_filereader(read1fr);
+	reset_filereader(read2fr);
 	fillin_bitvec(read1fr, ksize, is_fq, bt, refhash, &idx);
 	fillin_bitvec(read2fr, ksize, is_fq, bt, refhash, &idx);
 	fprintf(stdout, "Finished reference kmer building\n");
@@ -206,6 +217,15 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 	*/
 	free_bitvec(bt);
 	return hash;
+}
+
+uint32_t count_readnum(FileReader *readfr, int is_fq) {
+	uint32_t ret = 0;
+	Sequence *seq = NULL;
+	while (is_fq?fread_fastq_adv(&seq, readfr, FASTQ_FLAG_NO_NAME):fread_fasta_adv(&seq, readfr, FASTA_FLAG_NO_NAME)) {
+		ret ++;
+	}
+	return ret;
 }
 
 uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize) {
@@ -276,7 +296,7 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 			for (j = 0; j < len; j++) {
 				k = ((k << 2) | base_bit_table[(int)seq[j]]) & kmask;
 				if (j + 1 < ksize) continue;
-				if (quality[j] <= '#' && quality[j+1] <= '#') continue; // trim ends with low qualities
+				if (quality[j] <= '#' && quality[j+1] <= '#') break; // trim ends with low qualities
 				r = dna_rev_seq(k, ksize);
 				if (r < k) {
 					KMER.kmer = r;
