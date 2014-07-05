@@ -72,10 +72,10 @@ BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec *bt, u64
 	return ret;
 }
 
-kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhash *hash, BitVec *bt, uint64_t *idx) {
+kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhash *hash, BitVec *bt, uint64_t *idx, CBF *occ_table, uint32_t mincnt) {
 	kmer_t KMER, *kmer;
 	uint64_t k, r, kmask;
-	uint32_t i, j, len, rid, lowq_num;
+	uint32_t i, j, len, rid, lowq_num, occ;
 	int exists;
 	Sequence *seq;
 	char *quality;
@@ -83,6 +83,7 @@ kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhas
 	KMER.kmer = 0;
 	KMER.cnt = 0;
 	KMER.cnt2 = 0;
+	occ = 0;
 //	kmask = (1LLU << (2 * ksize)) - 1;
 	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
 	seq = NULL;
@@ -115,14 +116,19 @@ kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhas
 				KMER.kmer = k;
 			}
 			if (!get_bitvec(bt, *idx)) {
-				kmer = prepare_kmerhash(hash, KMER, &exists);
-				if (exists) {
-						if (kmer->cnt < UNIQ_KMER_MAX_CNT)
-								kmer->cnt ++;
+				occ = get_cbf(occ_table, &KMER.kmer, sizeof(uint64_t));
+				if (occ + 1 >= mincnt) {
+					kmer = prepare_kmerhash(hash, KMER, &exists);
+					if (exists) {
+							if (kmer->cnt < UNIQ_KMER_MAX_CNT)
+									kmer->cnt ++;
+					} else {
+							kmer->kmer = KMER.kmer;
+							kmer->cnt = occ+1;
+							kmer->cnt2 = 0;
+					}
 				} else {
-						kmer->kmer = KMER.kmer;
-						kmer->cnt = 1;
-						kmer->cnt2 = 0;
+					put_cbf(occ_table, &KMER.kmer, sizeof(uint64_t));
 				}
 			}
 			*idx = *idx+1;
@@ -134,12 +140,13 @@ kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhas
 	return hash;
 }
 
-kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *read2fr, int is_fq, uint32_t ksize, kmerhash* hash) {
+kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *read2fr, int is_fq, uint32_t ksize, kmerhash* hash, uint32_t mincnt) {
 	uint64_t KMER, *kmer;
 	uint64_t k, r, kmask;
-	uint32_t i, len, rdlen = 101, rdnum = 0;
+	uint32_t i, len, n_bit, rdlen = 101, rdnum = 0;
 	int exists;
 	BitVec *bt;
+	CBF *occ_table;
 	uint64_t idx = 0;
 	u64hash *refhash = init_u64hash(1023);
 	Sequence *seq;
@@ -208,14 +215,17 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 	reset_filereader(read1fr);
 	reset_filereader(read2fr);
 	//TODO: process bitvec bt using CBF
+	for(n_bit=2;n_bit<4 && (1U<<n_bit)<(mincnt+1);n_bit++);
+	occ_table = init_cbf(2 * 3000 * 1024 * 1024llu, n_bit, 3); // This is human genome, gsize=3000Mb, n_bit, nseed=3 TODO
 	idx = 0;
-	hash = build_readshash(read1fr, ksize, is_fq, hash, bt, &idx);
-	hash = build_readshash(read2fr, ksize, is_fq, hash, bt, &idx);
+	hash = build_readshash(read1fr, ksize, is_fq, hash, bt, &idx, occ_table, mincnt);
+	hash = build_readshash(read2fr, ksize, is_fq, hash, bt, &idx, occ_table, mincnt);
 	/*
 	index_bitvec(bt);
 	fprintf(stdout, "%llu reference kmers out of total %llu kmers in reads\n", (unsigned long long)bt->n_ones, (unsigned long long)hash->size);
 	fflush(stdout);
 	*/
+	free_cbf(occ_table);
 	free_bitvec(bt);
 	return hash;
 }
@@ -711,7 +721,7 @@ int main(int argc, char **argv) {
 	khash = init_kmerhash(1023);
 	//refhash = init_kmerhash(1023);
 
-	khash = build_refkmerhash(reff, inf1, inf2, is_fq, ksize, khash);
+	khash = build_refkmerhash(reff, inf1, inf2, is_fq, ksize, khash, mincnt);
 	//khash = build_kmerhash(inf1, ksize, is_fq, khash, refhash);
 	//khash = build_kmerhash(inf2, ksize, is_fq, khash, refhash);
 	fprintf(stdout, " %llu kmers loaded\n\n", (unsigned long long)count_kmerhash(khash));

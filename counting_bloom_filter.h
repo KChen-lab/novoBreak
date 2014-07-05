@@ -23,7 +23,6 @@
 
 #include "bitsvec.h"
 #include "hashset.h"
-#include "mem_share.h"
 
 static const uint32_t cbf_total_seeds = 20;
 
@@ -61,17 +60,6 @@ static inline CBF* init_cbf(size_t size, uint8_t n_bit, uint32_t n_seed){
 	cbf->seed_off = 0;
 	return cbf;
 }
-
-static inline size_t cbf_obj_desc_cnt(void *obj, int idx){
-	switch(idx){
-		case 0: return 1;
-		case 1: return ((CBF*)obj)->n_seed * sizeof(uint64_t);
-		case 2: return ((CBF*)obj)->n_seed * sizeof(uint8_t);
-		default: return 1;
-	}
-}
-
-static const obj_desc_t cbf_obj_desc = {sizeof(CBF), 3, {offsetof(CBF, bits), offsetof(CBF, codes), offsetof(CBF, cnts)}, {(obj_desc_t*)&bitsvec_obj_desc, (obj_desc_t*)&OBJ_DESC_ARRAY, (obj_desc_t*)&OBJ_DESC_ARRAY}, cbf_obj_desc_cnt};
 
 static inline void clear_cbf(CBF *cbf){ clear_bitsvec(cbf->bits); }
 

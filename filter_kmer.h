@@ -30,6 +30,7 @@
 #include "dna.h"
 #include "sort.h"
 #include "bitvec.h"
+#include "counting_bloom_filter.h"
 
 #define UNIQ_KMER_MAX_KSIZE 31
 #define UNIQ_KMER_MAX_CNT 999
@@ -77,9 +78,9 @@ static inline int trim_lowq(char *qual, int len, char min) {
 extern "C" {
 #endif
 
-BitVec* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, BitVec* bt, u64hash* refhash, uint64_t *idx);
-kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhash *hash, BitVec* bt, uint64_t *idx);
-kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *read2fr, int is_fq, uint32_t ksize, kmerhash* hash);
+BitVec* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, BitVec *bt, u64hash *refhash, uint64_t *idx);
+kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhash *hash, BitVec *bt, uint64_t *idx, CBF *occ_table, uint32_t mincnt);
+kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *read2fr, int is_fq, uint32_t ksize, kmerhash* hash, uint32_t mincnt);
 void cal_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq);
 uint32_t count_readnum(FileReader *readfr, int is_fq);
 uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize);
