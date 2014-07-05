@@ -139,7 +139,7 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 	uint64_t k, r, kmask;
 	uint32_t i, len, rdlen = 101, rdnum = 0;
 	int exists;
-	BitVec *bt = init_bitvec(1024);
+	BitVec *bt;
 	uint64_t idx = 0;
 	u64hash *refhash = init_u64hash(1023);
 	Sequence *seq;
@@ -191,12 +191,13 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 	reset_filereader(read1fr);
 	rdnum = count_readnum(read1fr, is_fq);
 	fprintf(stdout, "There are a total of %u pairs of reads\n", rdnum);fflush(stdout);
-	encap_bitvec(bt, rdnum*2*(rdlen-ksize+1));
-	zeros_bitvec(bt);
+	bt = init_bitvec((uint64_t)rdnum*2*(rdlen-ksize+1));
 	reset_filereader(read1fr);
 	reset_filereader(read2fr);
 	fillin_bitvec(read1fr, ksize, is_fq, bt, refhash, &idx);
+	//printf("here idx=%llu\n", (unsigned long long)idx);
 	fillin_bitvec(read2fr, ksize, is_fq, bt, refhash, &idx);
+	//printf("here idx=%llu\n", (unsigned long long)idx);
 	fprintf(stdout, "Finished reference kmer building\n");
 	fflush(stdout);
 	free_u64hash(refhash);
