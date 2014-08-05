@@ -73,7 +73,7 @@ FileReader* fopen_m_filereader(int n_file, char **filenames){
 		} else if((fc->file = fopen(filenames[i], "r")) != NULL){
 			fc->filename = (char*)malloc(sizeof(char)* (strlen(filenames[i])+1));
 			strcpy(fc->filename, filenames[i]);
-			if(i){ fclose(fc->file); fc->file = NULL; }
+			//if(i){ fclose(fc->file); fc->file = NULL; }
 			fc->is_proc  = 0;
 		} else {
 			return NULL;

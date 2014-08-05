@@ -584,7 +584,7 @@ int usage() {
 		   "Auther: Zechen Chong <zchong@mdanderson.org> \n"
 		   "Version: 1.04 (r20140701)\n"
 		   "Usage:\n"
-		   "  clinsek -1 <tumor_1.fq(.gz)> -2 <tumor_2.fq(.gz)> -3 <normal_1.fq(.gz)> -4 <normal_2.fq(.gz)> -r <reference> -o <output.kmer> [options]\n"
+		   "  novoBreak -1 <tumor_1.fq(.gz)> -2 <tumor_2.fq(.gz)> -3 <normal_1.fq(.gz)> -4 <normal_2.fq(.gz)> -r <reference> -o <output.kmer> [options]\n"
 		   "Options:\n"
 		   "  -h             This help\n"
 		   "  -1 <string>    Treatment pair1 file in fastq format. Multiple treatment files could be input as -1 s1_1.fq -1 s2_1.fq ...\n"
