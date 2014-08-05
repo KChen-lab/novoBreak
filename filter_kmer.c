@@ -196,9 +196,10 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 	}
 	free_sequence(seq);
 	reset_filereader(read1fr);
-	rdnum = count_readnum(read1fr, is_fq);
+	//rdnum = count_readnum(read1fr, is_fq);
+	rdnum = 2000000000llu;
 	fprintf(stdout, "There are a total of %u pairs of reads\n", rdnum);fflush(stdout);
-	bt = init_bitvec((uint64_t)rdnum*2*(rdlen-ksize+1));
+	bt = init_bitvec(2llu*rdnum*(rdlen-ksize+1));
 	reset_filereader(read1fr);
 	reset_filereader(read2fr);
 	fillin_bitvec(read1fr, ksize, is_fq, bt, refhash, &idx);
@@ -216,7 +217,7 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 	reset_filereader(read2fr);
 	//TODO: process bitvec bt using CBF
 	for(n_bit=2;n_bit<4 && (1U<<n_bit)<(mincnt+1);n_bit++);
-	occ_table = init_cbf(2 * 3000 * 1024 * 1024llu, n_bit, 3); // This is human genome, gsize=3000Mb, n_bit, nseed=3 TODO
+	occ_table = init_cbf(20 * 3000 * 1024 * 1024llu, n_bit, 3); // This is human genome, gsize=3000Mb, n_bit, nseed=3 TODO
 	idx = 0;
 	hash = build_readshash(read1fr, ksize, is_fq, hash, bt, &idx, occ_table, mincnt);
 	hash = build_readshash(read2fr, ksize, is_fq, hash, bt, &idx, occ_table, mincnt);
