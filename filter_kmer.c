@@ -41,6 +41,7 @@ BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec *bt, u64
 		k = 0;
 		//fprintf(stdout, "rid = %u %s\n", rid, seq->seq.string); fflush(stdout);
 		len = seq->seq.size;
+		if (len < ksize+3) continue;
 		quality = seq->qual.string;
 		lowq_num = 0;
 		for (j = 0; j < len; j++) {
@@ -95,6 +96,7 @@ kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhas
 		}
 		k = 0;
 		len = seq->seq.size;
+		if (len < ksize+3) continue;
 		quality = seq->qual.string;
 		lowq_num = 0;
 		for (j = 0; j < len; j++) {
@@ -252,6 +254,7 @@ uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize) {
 		fflush(stdout);
 		k = 0;
 		len = seq->seq.size;
+		if (len < ksize + 3) continue;
 		for (i = 0; i < ksize-1; i++)
 			k = (k << 2) | base_bit_table[(int)seq->seq.string[i]];
 		for (i = 0; i <= len-ksize; i++) {
@@ -297,6 +300,7 @@ pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t max
 		for (i = 0; i < 2; i ++) {
 			seq = read[i]->seq.string;
 			len = read[i]->seq.size;
+			if (len < ksize+3) continue;
 			quality = read[i]->qual.string;
 			lowq_num = 0;
 			for (j = 0; j < len; j++) {
@@ -544,6 +548,7 @@ void cal_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq) {
 		}
 		k = 0;
 		len = seq->seq.size;
+		if (len < ksize+3) continue;
 		for (i = 0; i < ksize-1; i++)
 			k = (k << 2) | base_bit_table[(int)seq->seq.string[i]];
 		for (i = 0; i <= len-ksize; i++) {
