@@ -63,7 +63,9 @@ BitVec* fillin_bitvec(FileReader *fr, uint32_t ksize, int is_fq, BitVec *bt, u64
 				KMER = k;
 			}
 			if (exists_u64hash(refhash, KMER)) {
-				one_bitvec(ret, *idx);
+				one2bitvec(ret);
+			} else {
+				zero2bitvec(ret);
 			}
 			*idx = *idx+1;
 		}
@@ -199,8 +201,8 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 	free_sequence(seq);
 	reset_filereader(read1fr);
 	//rdnum = count_readnum(read1fr, is_fq);
-	rdnum = 2000000000llu;
-	fprintf(stdout, "There are a total of %u pairs of reads\n", rdnum);fflush(stdout);
+	rdnum = 200000llu;
+	//fprintf(stdout, "There are a total of %u pairs of reads\n", rdnum);fflush(stdout);
 	bt = init_bitvec(2llu*rdnum*(rdlen-ksize+1));
 	reset_filereader(read1fr);
 	reset_filereader(read2fr);
@@ -208,6 +210,9 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 	//printf("here idx=%llu\n", (unsigned long long)idx);
 	fillin_bitvec(read2fr, ksize, is_fq, bt, refhash, &idx);
 	//printf("here idx=%llu\n", (unsigned long long)idx);
+	index_bitvec(bt);
+	fprintf(stdout, "There are %llu reference kmers and %llu non-reference kmers\n", (unsigned long long)bt->n_ones, (unsigned long long)bt->n_bit-bt->n_ones);
+	fflush(stdout);
 	fprintf(stdout, "Finished reference kmer building\n");
 	fflush(stdout);
 	free_u64hash(refhash);
@@ -219,7 +224,8 @@ kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *rea
 	reset_filereader(read2fr);
 	//TODO: process bitvec bt using CBF
 	for(n_bit=2;n_bit<4 && (1U<<n_bit)<(mincnt+1);n_bit++);
-	occ_table = init_cbf(20 * 3000 * 1024 * 1024llu, n_bit, 3); // This is human genome, gsize=3000Mb, n_bit, nseed=3 TODO
+	//occ_table = init_cbf(20 * 3000 * 1024 * 1024llu, n_bit, 3); // This is human genome, gsize=3000Mb, n_bit, nseed=3 TODO
+	occ_table = init_cbf(60*1024*1024*1024llu, n_bit, 3); // This is human genome, gsize=3000Mb, n_bit, nseed=3 TODO
 	idx = 0;
 	hash = build_readshash(read1fr, ksize, is_fq, hash, bt, &idx, occ_table, mincnt);
 	hash = build_readshash(read2fr, ksize, is_fq, hash, bt, &idx, occ_table, mincnt);
@@ -587,9 +593,9 @@ inline int cmp_kmer(const void *e1, const void *e2) {
 int usage() {
 	printf("novoBreak - a tool for discovering somatic sv breakpoints\n"
 		   "Auther: Zechen Chong <zchong@mdanderson.org> \n"
-		   "Version: 1.04 (r20140701)\n"
+		   "Version: 1.05 (r20150527)\n"
 		   "Usage:\n"
-		   "  novoBreak -1 <tumor_1.fq(.gz)> -2 <tumor_2.fq(.gz)> -3 <normal_1.fq(.gz)> -4 <normal_2.fq(.gz)> -r <reference> -o <output.kmer> [options]\n"
+		   "  novoBreak -1 <tumor_1.fq> -2 <tumor_2.fq> -3 <normal_1.fq> -4 <normal_2.fq> -r <reference> -o <output.kmer> [options]\n"
 		   "Options:\n"
 		   "  -h             This help\n"
 		   "  -1 <string>    Treatment pair1 file in fastq format. Multiple treatment files could be input as -1 s1_1.fq -1 s2_1.fq ...\n"
@@ -597,10 +603,10 @@ int usage() {
 		   "  -3 <string>    Control pair1 file in fastq format. Multiple treatment files could be input as -3 c1_1.fq -3 c2_1.fq ...\n"
 		   "  -4 <string>    Control pair2 file in fastq format. Multiple treatment files could be input as -4 c1_2.fq -4 c2_2.fq ...\n"
 		   "  -r <string>    Reference file in fasta format\n"
-           "  -k <int>       Kmer size, <=31 [27]\n"
+           "  -k <int>       Kmer size, <=31 [31]\n"
 		   "  -o <string>    Output kmer\n"
 		   "  -g <int>       Output germline events [0]\n"  
-		   "  -m <int>       Minimum kmer count regarded as novo kmers [4]\n"
+		   "  -m <int>       Minimum kmer count regarded as novo kmers [3]\n"
 		   );
 
 	return 1;
@@ -619,7 +625,7 @@ int main(int argc, char **argv) {
 	ctrl1list = init_flist(2);
 	ctrl2list = init_flist(2);
 	int c, is_fq, is_somatic = 1;
-	uint32_t ksize = 27, mincnt = 4, i, maxcnt2 = 3;
+	uint32_t ksize = 31, mincnt = 3, i, maxcnt2 = 3;
 	uint64_t ret;
 	in1file = in2file = outfile = ctrl1file = ctrl2file = reffile = NULL;
 
