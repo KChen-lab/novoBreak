@@ -65,7 +65,7 @@ BitVec* fillin_bitvec(samfile_t *bamin, uint32_t ksize, BitVec *bt, u64hash *ref
 		if(check_bam_alignment(b)) continue; //skip (nearly) identical reads to reference
 		len = b->core.l_qseq;
 		if (len < ksize+3) continue;
-		quality = bam1_qual(b);
+		quality = (char*)bam1_qual(b);
 		lowq_num = 0;
 		for (j = 0; j < len; j++) {
 			if (quality[j] <= '#') lowq_num ++;
@@ -129,7 +129,7 @@ kmerhash* build_readshash(samfile_t *bamin, uint32_t ksize, kmerhash *hash, BitV
 		if(check_bam_alignment(b)) continue; //skip (nearly) identical reads to reference
 		len = b->core.l_qseq;
 		if (len < ksize+3) continue;
-		quality = bam1_qual(b);
+		quality = (char*)bam1_qual(b);
 		lowq_num = 0;
 		for (j = 0; j < len; j++) {
 			if (quality[j] <= '#') lowq_num ++;
@@ -230,7 +230,7 @@ kmerhash* build_refkmerhash(FileReader *fr, samfile_t *bamin, uint32_t ksize, km
 	fflush(stdout);
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 
-	bam_seek(bamin, 0, SEEK_SET);
+	//bam_seek(bamin->bam, 0, SEEK_SET);
 	
 	//TODO: process bitvec bt using CBF
 	for(n_bit=2;n_bit<4 && (1U<<n_bit)<(mincnt+1);n_bit++);
@@ -288,7 +288,7 @@ uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize) {
 
 void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, samfile_t *bamin, int is_somatic, chash *somanames, chash *germnames) {
 	kmer_t KMER, *ret;
-	uint32_t rid, len, i, j, ii, lowq_num, flag; //, len_head;
+	uint32_t rid, len, j, lowq_num, flag; //, len_head;
 	char *quality;
 	uint64_t k, kmask = (1LLU << (2 * ksize)) - 1, r;
 	uint8_t *seq;
@@ -298,7 +298,8 @@ void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxc
 
 	rid = 0;
 	KMER.cnt = 0;
-
+	
+	//bam_seek(bamin->bam, 0, SEEK_SET);
 	while (samread(bamin, b) > 0) {
 		flag = b->core.flag;
 		rid ++;
@@ -310,7 +311,7 @@ void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxc
 		if(check_bam_alignment(b)) continue; //skip (nearly) identical reads to reference
 		len = b->core.l_qseq;
 		if (len < ksize+3) continue;
-		quality = bam1_qual(b);
+		quality = (char*)bam1_qual(b);
 		lowq_num = 0;
 		for (j = 0; j < len; j++) {
 			if (quality[j] <= '#') lowq_num ++;
@@ -362,20 +363,19 @@ static inline int cmp_pair_func(pair_t p1, pair_t p2, void *obj) {
 define_quick_sort(sort_pairs, pair_t, cmp_pair_func);
 */
 
-void dedup_pairs(samfile_t *somaout, samfile_t *germout, samfile_t *bamin, chash *somanames, chash *germnames) {
-	uint32_t i, rid = 0;
+void dedup_pairs(samfile_t *somaout, samfile_t *germout, samfile_t *bamin, chash *somanames, chash *germnames, uint32_t ksize) {
+	uint32_t rid = 0, len;
 	//char pre1[256] = "", pre2[256] = "";
 	//mut_type pre_t = SOMATIC;
-	uint32_t *skey, *gkey;
-	int exists;
+	uint32_t flag;
 
 	uint8_t *seq;
 	bam1_t *b, B;
 	b = &B;
 	memset(b, 0, sizeof(bam1_t));
 //	kmask = (1LLU << (2 * ksize)) - 1;
-	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
 	seq = NULL;
+	//bam_seek(bamin->bam, 0, SEEK_SET);
 	while (samread(bamin, b) > 0) {
 		flag = b->core.flag;
 		rid ++;
@@ -383,7 +383,6 @@ void dedup_pairs(samfile_t *somaout, samfile_t *germout, samfile_t *bamin, chash
 			fprintf(stdout, "[%s] parsed %10u reads\r", __FUNCTION__, rid);
 			fflush(stdout);
 		}
-		k = 0;
 		if (flag >= 256) continue; // skip secondary alignments and other exceptions
 		if(check_bam_alignment(b)) continue; //skip (nearly) identical reads to reference
 		len = b->core.l_qseq;
@@ -423,15 +422,14 @@ void dedup_pairs(samfile_t *somaout, samfile_t *germout, samfile_t *bamin, chash
 
 void cal_ctrl_kmers(kmerhash *hash, samfile_t *ctrl, uint32_t ksize) {
 	kmer_t KMER, *ret;
-	Sequence *seq;
 	uint64_t k, r, kmask;
 	uint32_t i, len, rid, flag;
 //	kmask = (1LLU << (2 * ksize)) - 1;
 	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
 	ret = 0;
 	rid = 0;
-	seq = NULL;
 	uint8_t *seq;
+	seq = NULL;
 	bam1_t *b, B;
 	b = &B;
 	memset(b, 0, sizeof(bam1_t));
@@ -529,7 +527,7 @@ int main(int argc, char **argv) {
 			default: return usage();
 		}
 	}
-	if (k > 31 || k < 11) return usage();
+	if (ksize > 31 || ksize < 11) return usage();
 	if ((reff = fopen_filereader(reffile)) == NULL) {
 		fprintf(stderr, " -- Cannot open reference file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
 		fflush(stderr);
@@ -581,18 +579,28 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Loading sequences...\n");
 	fflush(stdout);
+	samclose(inf);
 	somanames = init_chash(1023);
 	germnames = init_chash(1023);
+	if ((inf = samopen(infile, "rb", NULL)) == NULL) {
+		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
+		fflush(stderr);
+		abort();
+	} //TODO: should use seek instead of reopen 
 	loadkmerseq(khash, ksize, mincnt, maxcnt2, inf, is_somatic, somanames, germnames); //TODO
+	samclose(inf);
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	//fprintf(stdout, "There are %llu pairs loaded\n\n", (unsigned long long)count_pairv(pairs));
 	fflush(stdout);
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Remove duplicate sequences...\n");
 	fflush(stdout);
-	reset_filereader(inf1);
-	reset_filereader(inf2);
-	dedup_pairs(somaout, germout, inf, somanames, germnames);
+	if ((inf = samopen(infile, "rb", NULL)) == NULL) {
+		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
+		fflush(stderr);
+		abort();
+	} //TODO: should use seek instead of reopen 
+	dedup_pairs(somaout, germout, inf, somanames, germnames, ksize);
 	fprintf(stdout, "[%s]\n\n", date()); fflush(stdout);
 	fflush(stdout);
 	reset_iter_kmerhash(khash);
@@ -628,3 +636,4 @@ int main(int argc, char **argv) {
 	fprintf(stderr, "Program exit normally\n");
 	return 0;
 }
+
