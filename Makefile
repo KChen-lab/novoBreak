@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-g -W -Wall -O2 -finline-functions -D_FILE_OFFSET_BITS=64
-GLIBS=-lm  -lz
+GLIBS=-lm -lbam -lz
 INCLUDE=-Isamtools
 LIBPATH=-Lsamtools
 GENERIC_SRC= string.h vector.h file_reader.h file_reader.c hashset.h list.h dna.h sort.h 
@@ -17,7 +17,7 @@ nbasm: file_reader.c asm_R2.c  localasm_main.c
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 clean:
-	rm -f *.o *.gcda *.gcno *.gcov gmon.out novobreak nbasm
+	rm -f samtools/*.o samtools/libbam.a *.o *.gcda *.gcno *.gcov gmon.out novobreak nbasm
 
 clear:
 	rm -f *.o *.gcda *.gcno *.gcov gmon.out
