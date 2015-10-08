@@ -118,6 +118,7 @@ kmerhash* build_readshash(samfile_t *bamin, uint32_t ksize, kmerhash *hash, BitV
 	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
 	seq = NULL;
 	while (samread(bamin, b) > 0) {
+		printf("herehere\n");
 		flag = b->core.flag;
 		rid ++;
 		if ((rid & 0xFFFFU) == 0) {
@@ -215,7 +216,6 @@ kmerhash* build_refkmerhash(FileReader *fr, samfile_t *bamin, uint32_t ksize, km
 		}
 	}
 	fprintf(stdout, "Calculating number of paired reads ...\n");fflush(stdout);
-	free_sequence(seq);
 	rdnum = 200000llu;
 	bt = init_bitvec(2llu*rdnum*(rdlen-ksize+1));
 	fillin_bitvec(bamin, ksize, bt, refhash, &idx);
@@ -527,6 +527,7 @@ int main(int argc, char **argv) {
 			default: return usage();
 		}
 	}
+	if(reffile == NULL || infile == NULL || outfile == NULL) return usage();
 	if (ksize > 31 || ksize < 11) return usage();
 	if ((reff = fopen_filereader(reffile)) == NULL) {
 		fprintf(stderr, " -- Cannot open reference file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
