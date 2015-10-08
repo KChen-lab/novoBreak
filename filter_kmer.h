@@ -31,6 +31,7 @@
 #include "sort.h"
 #include "bitvec.h"
 #include "counting_bloom_filter.h"
+#include "samtools/sam.h"
 
 #define UNIQ_KMER_MAX_KSIZE 31
 #define UNIQ_KMER_MAX_CNT 999
@@ -39,23 +40,8 @@ typedef struct {
 	uint64_t kmer, cnt:16, cnt2:16;
 } kmer_t;
 
-typedef struct {
-	char *name;
-	char *header;
-	char *seq;
-	char *qual;
-} pair;
 
 typedef enum {SOMATIC, GERMLINE, LOH} mut_type;
-
-typedef struct {
-	uint32_t pid;
-	mut_type mt;
-
-} pair_t;
-
-define_list(pairv, pair_t);
-define_list(flist, char*);
 
 
 #define kmer_hashcode(k) u64hashcode((k).kmer)
@@ -78,15 +64,15 @@ static inline int trim_lowq(char *qual, int len, char min) {
 extern "C" {
 #endif
 
-BitVec* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, BitVec *bt, u64hash *refhash, uint64_t *idx);
-kmerhash* build_readshash(FileReader *readfr, uint32_t ksize, int is_fq, kmerhash *hash, BitVec *bt, uint64_t *idx, CBF *occ_table, uint32_t mincnt);
-kmerhash* build_refkmerhash(FileReader *fr, FileReader *read1fr, FileReader *read2fr, int is_fq, uint32_t ksize, kmerhash* hash, uint32_t mincnt);
-void cal_ctrl_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize, int is_fq);
+//BitVec* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, BitVec *bt, u64hash *refhash, uint64_t *idx);
+BitVec* fillin_bitvec(samfile_t *bamin, uint32_t ksize, BitVec *bt, u64hash *refhash, uint64_t *idx) {
+kmerhash* build_readshash(samfile_t *bamin, uint32_t ksize, kmerhash *hash, BitVec *bt, uint64_t *idx, CBF *occ_table, uint32_t mincnt);
+kmerhash* build_refkmerhash(FileReader *fr, samfile_t *bamin, uint32_t ksize, kmerhash* hash, uint32_t mincnt);
+void cal_ctrl_kmers(kmerhash *hash, samfile_t *ctrl, uint32_t ksize);
 uint32_t count_readnum(FileReader *readfr, int is_fq);
 uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize);
-pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, FileReader *f1, FileReader *f2, int is_somatic);
-void dedup_pairs(pairv *pairs, FILE *out1, FILE *out2, FILE *out3, FILE *out4, FileReader *f1, FileReader *f2);
-void destroy_pairv(pairv *pairs);
+pairv* loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, samfile_t *bamin, int is_somatic);
+void dedup_pairs(samfile_t *somaout, samfile_t *germout, samfile_t *bamin, chash *somanames, chash *germnames) {
 
 #ifdef __CPLUSPLUS
 }
