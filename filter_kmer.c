@@ -37,7 +37,7 @@ int check_bam_alignment(bam1_t *b){
 }
 
 
-BitVec* fillin_bitvec(samfile_t *bamin, uint32_t ksize, BitVec *bt, u64hash *refhash, uint64_t *idx) {
+BitVec* fillin_bitvec(bamFile bamin, uint32_t ksize, BitVec *bt, u64hash *refhash, uint64_t *idx) {
 	uint64_t KMER;
 	BitVec* ret = bt;
 	uint64_t k, r, kmask;
@@ -49,10 +49,9 @@ BitVec* fillin_bitvec(samfile_t *bamin, uint32_t ksize, BitVec *bt, u64hash *ref
 //	kmask = (1LLU << (2 * ksize)) - 1;
 	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
 	seq = NULL;
-	bam1_t *b, B;
-	b = &B;
-	memset(b, 0, sizeof(bam1_t));
-	while (samread(bamin, b) > 0) {
+	bam1_t *b;
+	b = (bam1_t*)calloc(1, sizeof(bam1_t));
+	while (bam_read1(bamin, b) >= 0) {
 		flag = b->core.flag;
 		rid ++;
 		if ((rid & 0xFFFFU) == 0) {
@@ -68,7 +67,7 @@ BitVec* fillin_bitvec(samfile_t *bamin, uint32_t ksize, BitVec *bt, u64hash *ref
 		quality = (char*)bam1_qual(b);
 		lowq_num = 0;
 		for (j = 0; j < len; j++) {
-			if (quality[j] <= '#') lowq_num ++;
+			if (quality[j] + 33 <= '#') lowq_num ++;
 		}
 		if ((float)lowq_num/len >= 0.5) continue; //skip reads with too many low quality bases
 		//encap_bitvec(bt, 1024);
@@ -77,7 +76,7 @@ BitVec* fillin_bitvec(samfile_t *bamin, uint32_t ksize, BitVec *bt, u64hash *ref
 			k = (k << 2) | bit4_bit_table[bam1_seqi(seq, i)];
 		}
 		for (i = 0; i <= len-ksize; i++) {
-			if (quality[i+ksize-1] <= '#' && i+ksize < len && quality[i+ksize] <= '#') break; // trim ends with low qualities
+			if (quality[i+ksize-1] + 33 <= '#' && i+ksize < len && quality[i+ksize] + 33 <= '#') break; // trim ends with low qualities
 			k = ((k << 2) | bit4_bit_table[bam1_seqi(seq, i+ksize-1)])  & kmask;
 			//if (i + 1 < ksize) continue;
 			r = dna_rev_seq(k, ksize);
@@ -99,7 +98,7 @@ BitVec* fillin_bitvec(samfile_t *bamin, uint32_t ksize, BitVec *bt, u64hash *ref
 	return ret;
 }
 
-kmerhash* build_readshash(samfile_t *bamin, uint32_t ksize, kmerhash *hash, BitVec *bt, uint64_t *idx, CBF *occ_table, uint32_t mincnt) {
+kmerhash* build_readshash(bamFile bamin, uint32_t ksize, kmerhash *hash, BitVec *bt, uint64_t *idx, CBF *occ_table, uint32_t mincnt) {
 	kmer_t KMER, *kmer;
 	uint64_t k, r, kmask;
 	uint32_t i, j, len, rid, lowq_num, occ, flag;
@@ -111,14 +110,12 @@ kmerhash* build_readshash(samfile_t *bamin, uint32_t ksize, kmerhash *hash, BitV
 	KMER.cnt2 = 0;
 	occ = 0;
 	uint8_t *seq;
-	bam1_t *b, B;
-	b = &B;
-	memset(b, 0, sizeof(bam1_t));
+	bam1_t *b;
+	b = (bam1_t*)calloc(1, sizeof(bam1_t));
 //	kmask = (1LLU << (2 * ksize)) - 1;
 	kmask = 0xFFFFFFFFFFFFFFFFLLU >> ((32-ksize)*2);
 	seq = NULL;
-	while (samread(bamin, b) > 0) {
-		printf("herehere\n");
+	while (bam_read1(bamin, b) >= 0) {
 		flag = b->core.flag;
 		rid ++;
 		if ((rid & 0xFFFFU) == 0) {
@@ -133,7 +130,7 @@ kmerhash* build_readshash(samfile_t *bamin, uint32_t ksize, kmerhash *hash, BitV
 		quality = (char*)bam1_qual(b);
 		lowq_num = 0;
 		for (j = 0; j < len; j++) {
-			if (quality[j] <= '#') lowq_num ++;
+			if (quality[j] + 33 <= '#') lowq_num ++;
 		}
 		if ((float)lowq_num/len >= 0.5) continue; // too many low quality bases
 		//encap_bitvec(bt, 1024);
@@ -142,7 +139,7 @@ kmerhash* build_readshash(samfile_t *bamin, uint32_t ksize, kmerhash *hash, BitV
 			k = (k << 2) | bit4_bit_table[bam1_seqi(seq, i)];
 		}
 		for (i = 0; i <= len-ksize; i++) {
-			if (quality[i+ksize-1] <= '#' && i+ksize < len && quality[i+ksize] <= '#') break; // trim ends with low qualities
+			if (quality[i+ksize-1] + 33 <= '#' && i+ksize < len && quality[i+ksize] + 33 <= '#') break; // trim ends with low qualities
 			k = ((k << 2) | bit4_bit_table[bam1_seqi(seq, i+ksize-1)])  & kmask;
 			//if (i + 1 < ksize) continue;
 			r = dna_rev_seq(k, ksize);
@@ -176,7 +173,7 @@ kmerhash* build_readshash(samfile_t *bamin, uint32_t ksize, kmerhash *hash, BitV
 	return hash;
 }
 
-kmerhash* build_refkmerhash(FileReader *fr, samfile_t *bamin, uint32_t ksize, kmerhash* hash, uint32_t mincnt) {
+kmerhash* build_refkmerhash(FileReader *fr, bamFile bamin, uint32_t ksize, kmerhash* hash, uint32_t mincnt, uint64_t off) {
 	uint64_t KMER, *kmer;
 	uint64_t k, r, kmask;
 	uint32_t i, len, n_bit, rdlen = 101, rdnum = 0;
@@ -230,7 +227,7 @@ kmerhash* build_refkmerhash(FileReader *fr, samfile_t *bamin, uint32_t ksize, km
 	fflush(stdout);
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 
-	//bam_seek(bamin->bam, 0, SEEK_SET);
+	bam_seek(bamin, off, SEEK_SET);
 	
 	//TODO: process bitvec bt using CBF
 	for(n_bit=2;n_bit<4 && (1U<<n_bit)<(mincnt+1);n_bit++);
@@ -286,25 +283,23 @@ uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize) {
 	return ret;
 }
 
-void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, samfile_t *bamin, int is_somatic, chash *somanames, chash *germnames) {
+void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, bamFile bamin, int is_somatic, chash *somanames, chash *germnames) {
 	kmer_t KMER, *ret;
 	uint32_t rid, len, j, lowq_num, flag; //, len_head;
 	char *quality;
 	uint64_t k, kmask = (1LLU << (2 * ksize)) - 1, r;
 	uint8_t *seq;
-	bam1_t *b, B;
-	b = &B;
-	memset(b, 0, sizeof(bam1_t));
+	bam1_t *b;
+	b = (bam1_t*)calloc(1, sizeof(bam1_t));
 
 	rid = 0;
 	KMER.cnt = 0;
 	
-	//bam_seek(bamin->bam, 0, SEEK_SET);
-	while (samread(bamin, b) > 0) {
+	while (bam_read1(bamin, b) >= 0) {
 		flag = b->core.flag;
 		rid ++;
 		if ((rid & 0xFFFFU) == 0) {
-			fprintf(stdout, "[%s] parsed %10u pairs\r", __FUNCTION__, rid);
+			fprintf(stdout, "[%s] parsed %10u reads\r", __FUNCTION__, rid);
 			fflush(stdout);
 		}
 		if (flag >= 256) continue; // skip secondary alignments and other exceptions
@@ -314,7 +309,7 @@ void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxc
 		quality = (char*)bam1_qual(b);
 		lowq_num = 0;
 		for (j = 0; j < len; j++) {
-			if (quality[j] <= '#') lowq_num ++;
+			if (quality[j] + 33 <= '#') lowq_num ++;
 		}
 		if ((float)lowq_num/len >= 0.5) continue; // too many low quality bases
 		k = 0;
@@ -323,7 +318,7 @@ void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxc
 		for (j = 0; j < len; j++) {
 			k = ((k << 2) | bit4_bit_table[bam1_seqi(seq, j)]) & kmask;
 			if (j + 1 < ksize) continue;
-			if (quality[j] <= '#' && quality[j+1] <= '#') break; // trim ends with low qualities
+			if (quality[j] + 33 <= '#' && quality[j+1] + 33 <= '#') break; // trim ends with low qualities
 			r = dna_rev_seq(k, ksize);
 			if (r < k) {
 				KMER.kmer = r;
@@ -335,11 +330,11 @@ void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxc
 				continue;
 			} 
 			if (ret->cnt2 < maxcnt2 && (float)ret->cnt2/(ret->cnt+ret->cnt2) < 0.01) { //TODO magic number
-				put_chash(somanames, bam1_qname(b));
+				put_chash(somanames, strdup(bam1_qname(b)));
 			}
 			else if (ret->cnt2 > maxcnt2 * 2) { //TODO magic number
 				if (is_somatic) continue;
-				put_chash(germnames, bam1_qname(b));
+				put_chash(germnames, strdup(bam1_qname(b)));
 			}
 		}
 	}
@@ -363,20 +358,19 @@ static inline int cmp_pair_func(pair_t p1, pair_t p2, void *obj) {
 define_quick_sort(sort_pairs, pair_t, cmp_pair_func);
 */
 
-void dedup_pairs(samfile_t *somaout, samfile_t *germout, samfile_t *bamin, chash *somanames, chash *germnames, uint32_t ksize) {
+void dedup_pairs(samfile_t *somaout, samfile_t *germout, bamFile bamin, chash *somanames, chash *germnames, uint32_t ksize) {
 	uint32_t rid = 0, len;
 	//char pre1[256] = "", pre2[256] = "";
 	//mut_type pre_t = SOMATIC;
 	uint32_t flag;
 
 	uint8_t *seq;
-	bam1_t *b, B;
-	b = &B;
-	memset(b, 0, sizeof(bam1_t));
+	bam1_t *b;
+	b = (bam1_t*)calloc(1, sizeof(bam1_t));
 //	kmask = (1LLU << (2 * ksize)) - 1;
 	seq = NULL;
-	//bam_seek(bamin->bam, 0, SEEK_SET);
-	while (samread(bamin, b) > 0) {
+	//bam_seek(bamin, 0, SEEK_SET);
+	while (bam_read1(bamin, b) >= 0) {
 		flag = b->core.flag;
 		rid ++;
 		if ((rid & 0xFFFFU) == 0) {
@@ -503,7 +497,8 @@ int usage() {
 int main(int argc, char **argv) {
 	kmerhash *khash;
 	kmer_t KMER;
-	samfile_t *inf, *ctrlf;
+	bamFile inf;
+	samfile_t *ctrlf;
 	FileReader *reff;
 	chash *somanames, *germnames;
 	FILE *out;
@@ -513,6 +508,7 @@ int main(int argc, char **argv) {
 	uint32_t ksize = 31, mincnt = 3, i, maxcnt2 = 3;
 	uint64_t ret;
 	infile = outfile = ctrlfile = reffile = NULL;
+ 	bam_header_t *h = NULL;
 
 	while ((c = getopt(argc, argv, "hi:c:k:o:m:r:g")) != -1) {
 		switch (c) {
@@ -534,7 +530,7 @@ int main(int argc, char **argv) {
 		fflush(stderr);
 		abort();
 	}
-	if ((inf = samopen(infile, "rb", NULL)) == NULL) {
+	if ((inf = bam_open(infile, "r")) == NULL) {
 		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
 		fflush(stderr);
 		abort();
@@ -551,13 +547,13 @@ int main(int argc, char **argv) {
 		abort();
 	}
 
-	if ((somaout = samopen("somaticreads.bam", "wb", inf->header)) == NULL) {
+	if ((somaout = samopen("somaticreads.bam", "wb", ctrlf->header)) == NULL) {
 		fprintf(stderr, " cannot open file to write\n");
 		fflush(stderr);
 		abort();
 	}
 
-	if ((germout = samopen("germlinereads.bam", "wb", inf->header)) == NULL) {
+	if ((germout = samopen("germlinereads.bam", "wb", ctrlf->header)) == NULL) {
 		fprintf(stderr, " cannot open file to write\n");
 		fflush(stderr);
 		abort();
@@ -565,8 +561,9 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	khash = init_kmerhash(1023);
 	//refhash = init_kmerhash(1023);
-
-	khash = build_refkmerhash(reff, inf, ksize, khash, mincnt);
+	h = bam_header_read(inf);
+	uint64_t off = bgzf_tell(inf);
+	khash = build_refkmerhash(reff, inf, ksize, khash, mincnt, off);
 	fprintf(stdout, " %llu kmers loaded\n\n", (unsigned long long)count_kmerhash(khash));
 	fflush(stdout);
 	
@@ -574,33 +571,20 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "Calculating kmers from control...\n");
 	fflush(stdout);
 	cal_ctrl_kmers(khash, ctrlf, ksize );
-	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 
 	ret = 0;
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Loading sequences...\n");
 	fflush(stdout);
-	samclose(inf);
 	somanames = init_chash(1023);
 	germnames = init_chash(1023);
-	if ((inf = samopen(infile, "rb", NULL)) == NULL) {
-		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
-		fflush(stderr);
-		abort();
-	} //TODO: should use seek instead of reopen 
+	bam_seek(inf, off, SEEK_SET);
 	loadkmerseq(khash, ksize, mincnt, maxcnt2, inf, is_somatic, somanames, germnames); //TODO
-	samclose(inf);
-	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	//fprintf(stdout, "There are %llu pairs loaded\n\n", (unsigned long long)count_pairv(pairs));
-	fflush(stdout);
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	fprintf(stdout, "Remove duplicate sequences...\n");
 	fflush(stdout);
-	if ((inf = samopen(infile, "rb", NULL)) == NULL) {
-		fprintf(stderr, " -- Cannot open input file in %s -- %s:%d --\n", __FUNCTION__, __FILE__, __LINE__);
-		fflush(stderr);
-		abort();
-	} //TODO: should use seek instead of reopen 
+	bam_seek(inf, off, SEEK_SET);
 	dedup_pairs(somaout, germout, inf, somanames, germnames, ksize);
 	fprintf(stdout, "[%s]\n\n", date()); fflush(stdout);
 	fflush(stdout);
@@ -626,7 +610,8 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "%llu kmers passed the minimum frequency cutoff in tumor (%u) and maximum frequency cutoff in normal (%u)\n", (unsigned long long)ret, mincnt, maxcnt2);
 	fflush(stdout);
 	free_kmerhash(khash);
-	samclose(inf);
+	bam_close(inf);
+	bam_header_destroy(h);
 	samclose(ctrlf);
 	fclose_filereader(reff);
 	fclose(out);

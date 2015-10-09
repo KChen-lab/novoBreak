@@ -51,8 +51,8 @@ define_hashset(kmerhash, kmer_t, kmer_hashcode, kmer_equals);
 static inline int trim_lowq(char *qual, int len, char min) {
 	int i;
 	for (i = 0; i < len; i++) {
-		if (qual[i] <= min) {
-			if (i+1 < len && qual[i+1] <= min) {
+		if (qual[i] + 33 <= min) {
+			if (i+1 < len && qual[i+1] + 33 <= min) {
 				break;
 			}
 		}
@@ -66,14 +66,14 @@ extern "C" {
 
 //BitVec* build_kmerhash(FileReader *fr, uint32_t ksize, int is_fq, BitVec *bt, u64hash *refhash, uint64_t *idx);
 int check_bam_alignment(bam1_t *b);
-BitVec* fillin_bitvec(samfile_t *bamin, uint32_t ksize, BitVec *bt, u64hash *refhash, uint64_t *idx);
-kmerhash* build_readshash(samfile_t *bamin, uint32_t ksize, kmerhash *hash, BitVec *bt, uint64_t *idx, CBF *occ_table, uint32_t mincnt);
-kmerhash* build_refkmerhash(FileReader *fr, samfile_t *bamin, uint32_t ksize, kmerhash* hash, uint32_t mincnt);
+BitVec* fillin_bitvec(bamFile bamin, uint32_t ksize, BitVec *bt, u64hash *refhash, uint64_t *idx);
+kmerhash* build_readshash(bamFile bamin, uint32_t ksize, kmerhash *hash, BitVec *bt, uint64_t *idx, CBF *occ_table, uint32_t mincnt);
+kmerhash* build_refkmerhash(FileReader *fr, bamFile bamin, uint32_t ksize, kmerhash* hash, uint32_t mincnt, uint64_t off);
 void cal_ctrl_kmers(kmerhash *hash, samfile_t *ctrl, uint32_t ksize);
 uint32_t count_readnum(FileReader *readfr, int is_fq);
 uint64_t filter_ref_kmers(kmerhash *hash, FileReader *fr, uint32_t ksize);
-void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, samfile_t *bamin, int is_somatic, chash *somanames, chash *germnames);
-void dedup_pairs(samfile_t *somaout, samfile_t *germout, samfile_t *bamin, chash *somanames, chash *germnames, uint32_t ksize);
+void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxcnt2, bamFile bamin, int is_somatic, chash *somanames, chash *germnames);
+void dedup_pairs(samfile_t *somaout, samfile_t *germout, bamFile bamin, chash *somanames, chash *germnames, uint32_t ksize);
 
 #ifdef __CPLUSPLUS
 }

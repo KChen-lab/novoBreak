@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-g -W -Wall -O0 -finline-functions -D_FILE_OFFSET_BITS=64
+CFLAGS=-g -W -Wall -O2 -finline-functions -D_FILE_OFFSET_BITS=64
 GLIBS=-lm -lbam -lz
 INCLUDE=-Isamtools
 LIBPATH=-Lsamtools
