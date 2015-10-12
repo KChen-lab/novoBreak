@@ -93,6 +93,7 @@ BitVec* fillin_bitvec(bamFile bamin, uint32_t ksize, BitVec *bt, u64hash *refhas
 			*idx = *idx+1;
 		}
 	}
+	bam_destroy1(b);
 	fprintf(stdout, "[%s] processed %10u reads\n", __FUNCTION__, rid);
 	fflush(stdout);
 	return ret;
@@ -167,6 +168,7 @@ kmerhash* build_readshash(bamFile bamin, uint32_t ksize, kmerhash *hash, BitVec 
 			*idx = *idx+1;
 		}
 	}
+	bam_destroy1(b);
 	fprintf(stdout, "[%s] processed %10u reads\n", __FUNCTION__, rid);
 	fflush(stdout);
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
@@ -233,6 +235,7 @@ kmerhash* build_refkmerhash(FileReader *fr, bamFile bamin, uint32_t ksize, kmerh
 	for(n_bit=2;n_bit<4 && (1U<<n_bit)<(mincnt+1);n_bit++);
 	//occ_table = init_cbf(20 * 3000 * 1024 * 1024llu, n_bit, 3); // This is human genome, gsize=3000Mb, n_bit, nseed=3 TODO
 	occ_table = init_cbf(60*1024*1024*1024llu, n_bit, 3); // This is human genome, gsize=3000Mb, n_bit, nseed=3 TODO
+	//occ_table = init_cbf(60*1024*1024llu, n_bit, 3); // This is human genome, gsize=3000Mb, n_bit, nseed=3 TODO
 	idx = 0;
 	hash = build_readshash(bamin, ksize, hash, bt, &idx, occ_table, mincnt);
 	/*
@@ -330,14 +333,15 @@ void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxc
 				continue;
 			} 
 			if (ret->cnt2 < maxcnt2 && (float)ret->cnt2/(ret->cnt+ret->cnt2) < 0.01) { //TODO magic number
-				put_chash(somanames, strdup(bam1_qname(b)));
+				put_chash(somanames, (bam1_qname(b)));
 			}
 			else if (ret->cnt2 > maxcnt2 * 2) { //TODO magic number
 				if (is_somatic) continue;
-				put_chash(germnames, strdup(bam1_qname(b)));
+				put_chash(germnames, (bam1_qname(b)));
 			}
 		}
 	}
+	bam_destroy1(b);
 	return;
 }
 /*
@@ -381,37 +385,14 @@ void dedup_pairs(samfile_t *somaout, samfile_t *germout, bamFile bamin, chash *s
 		if(check_bam_alignment(b)) continue; //skip (nearly) identical reads to reference
 		len = b->core.l_qseq;
 		if (len < ksize+3) continue;
-		if (exists_chash(somanames, bam1_qname(b))) { /*
-			i = trim_lowq(read[0]->qual.string, read[0]->qual.size, '#');
-			if (i == 0) {
-				fprintf(out1, "@%s\n%s\n+\n%s\n", read[0]->header.string, "N", "#"); 
-			} else {
-				fprintf(out1, "@%s\n%.*s\n+\n%.*s\n", read[0]->header.string, i, read[0]->seq.string, i, read[0]->qual.string); 
-			}
-			i = trim_lowq(read[1]->qual.string, read[1]->qual.size, '#');
-			if (i == 0) {
-				fprintf(out2, "@%s\n%s\n+\n%s\n", read[1]->header.string, "N", "#"); 
-			} else {
-				fprintf(out2, "@%s\n%.*s\n+\n%.*s\n", read[1]->header.string, i, read[1]->seq.string, i, read[1]->qual.string); 
-			}*/
+		if (exists_chash(somanames, bam1_qname(b))) { //FIXME: strcmp read 0x0 valgrind error
 			samwrite(somaout, b);
 		}
-		if (exists_chash(germnames, bam1_qname(b))) { /*
-			i = trim_lowq(read[0]->qual.string, read[0]->qual.size, '#');
-			if (i == 0) {
-				fprintf(out3, "@%s\n%s\n+\n%s\n", read[0]->header.string, "N", "#"); 
-			} else {
-				fprintf(out3, "@%s\n%.*s\n+\n%.*s\n", read[0]->header.string, i, read[0]->seq.string, i, read[0]->qual.string); 
-			}
-			i = trim_lowq(read[1]->qual.string, read[1]->qual.size, '#');
-			if (i == 0) {
-				fprintf(out4, "@%s\n%s\n+\n%s\n", read[1]->header.string, "N", "#"); 
-			} else {
-				fprintf(out4, "@%s\n%.*s\n+\n%.*s\n", read[1]->header.string, i, read[1]->seq.string, i, read[1]->qual.string); 
-			}*/
+		if (exists_chash(germnames, bam1_qname(b))) { 
 			samwrite(germout, b);
 		}
 	}
+	bam_destroy1(b);
 }
 
 void cal_ctrl_kmers(kmerhash *hash, samfile_t *ctrl, uint32_t ksize) {
@@ -424,9 +405,8 @@ void cal_ctrl_kmers(kmerhash *hash, samfile_t *ctrl, uint32_t ksize) {
 	rid = 0;
 	uint8_t *seq;
 	seq = NULL;
-	bam1_t *b, B;
-	b = &B;
-	memset(b, 0, sizeof(bam1_t));
+	bam1_t *b;
+	b = (bam1_t*)calloc(1, sizeof(bam1_t));
 	while (samread(ctrl, b) > 0) {
 		flag = b->core.flag;
 		rid ++;
@@ -457,9 +437,9 @@ void cal_ctrl_kmers(kmerhash *hash, samfile_t *ctrl, uint32_t ksize) {
 			}
 		}
 	}
+	bam_destroy1(b);
 	fprintf(stdout, "[%s] processed %10u reads\n", __FUNCTION__, rid);
 	fflush(stdout);
-
 	//return ret;
 }
 
@@ -508,7 +488,7 @@ int main(int argc, char **argv) {
 	uint32_t ksize = 31, mincnt = 3, i, maxcnt2 = 3;
 	uint64_t ret;
 	infile = outfile = ctrlfile = reffile = NULL;
- 	bam_header_t *h = NULL;
+	bam_header_t *header = NULL;
 
 	while ((c = getopt(argc, argv, "hi:c:k:o:m:r:g")) != -1) {
 		switch (c) {
@@ -561,8 +541,9 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	khash = init_kmerhash(1023);
 	//refhash = init_kmerhash(1023);
-	h = bam_header_read(inf);
+	header = bam_header_read(inf);
 	uint64_t off = bgzf_tell(inf);
+	bam_header_destroy(header);
 	khash = build_refkmerhash(reff, inf, ksize, khash, mincnt, off);
 	fprintf(stdout, " %llu kmers loaded\n\n", (unsigned long long)count_kmerhash(khash));
 	fflush(stdout);
@@ -611,7 +592,6 @@ int main(int argc, char **argv) {
 	fflush(stdout);
 	free_kmerhash(khash);
 	bam_close(inf);
-	bam_header_destroy(h);
 	samclose(ctrlf);
 	fclose_filereader(reff);
 	fclose(out);
