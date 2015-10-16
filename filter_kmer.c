@@ -333,11 +333,13 @@ void  loadkmerseq(kmerhash *hash, uint32_t ksize, uint32_t mincnt, uint32_t maxc
 				continue;
 			} 
 			if (ret->cnt2 < maxcnt2 && (float)ret->cnt2/(ret->cnt+ret->cnt2) < 0.01) { //TODO magic number
-				put_chash(somanames, (bam1_qname(b)));
+				if (!exists_chash(somanames, bam1_qname(b))) 
+					put_chash(somanames, strdup(bam1_qname(b)));
 			}
 			else if (ret->cnt2 > maxcnt2 * 2) { //TODO magic number
 				if (is_somatic) continue;
-				put_chash(germnames, (bam1_qname(b)));
+				if (!exists_chash(germnames, bam1_qname(b)))
+					put_chash(germnames, strdup(bam1_qname(b)));
 			}
 		}
 	}
@@ -385,7 +387,7 @@ void dedup_pairs(samfile_t *somaout, samfile_t *germout, bamFile bamin, chash *s
 		if(check_bam_alignment(b)) continue; //skip (nearly) identical reads to reference
 		len = b->core.l_qseq;
 		if (len < ksize+3) continue;
-		if (exists_chash(somanames, bam1_qname(b))) { //FIXME: strcmp read 0x0 valgrind error
+		if (exists_chash(somanames, bam1_qname(b))) { 
 			samwrite(somaout, b);
 		}
 		if (exists_chash(germnames, bam1_qname(b))) { 
@@ -597,6 +599,16 @@ int main(int argc, char **argv) {
 	fclose(out);
 	samclose(somaout);
 	samclose(germout);
+	for (i = 0; i < somanames->size; i++) {
+		if(exists_entity(somanames->flags, i)) { //TODO: use a list to hold the names instead of accessing hashset source code
+			free(somanames->array[i]);
+		}
+	}
+	for (i = 0; i < germnames->size; i++) {
+		if(exists_entity(germnames->flags, i)) {
+			free(germnames->array[i]);
+		}
+	}
 	free_chash(somanames);
 	free_chash(germnames);
 	fprintf(stderr, "Program exit normally\n");
