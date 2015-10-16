@@ -528,14 +528,15 @@ int main(int argc, char **argv) {
 		fflush(stderr);
 		abort();
 	}
+	header = bam_header_read(inf);
 
-	if ((somaout = samopen("somaticreads.bam", "wb", ctrlf->header)) == NULL) {
+	if ((somaout = samopen("somaticreads.bam", "wb", header)) == NULL) {
 		fprintf(stderr, " cannot open file to write\n");
 		fflush(stderr);
 		abort();
 	}
 
-	if ((germout = samopen("germlinereads.bam", "wb", ctrlf->header)) == NULL) {
+	if ((germout = samopen("germlinereads.bam", "wb", header)) == NULL) {
 		fprintf(stderr, " cannot open file to write\n");
 		fflush(stderr);
 		abort();
@@ -543,7 +544,6 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "[%s]\n", date()); fflush(stdout);
 	khash = init_kmerhash(1023);
 	//refhash = init_kmerhash(1023);
-	header = bam_header_read(inf);
 	uint64_t off = bgzf_tell(inf);
 	bam_header_destroy(header);
 	khash = build_refkmerhash(reff, inf, ksize, khash, mincnt, off);
